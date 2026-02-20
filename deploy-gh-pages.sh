@@ -22,6 +22,9 @@ find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'deploy-gh-pages.sh' ! -na
 cp -r $TEMP_DIR/* .
 rm -rf $TEMP_DIR
 
+# Always create .nojekyll file in root for GitHub Pages
+> .nojekyll
+
 git add .
 git commit -m "Deploy static site for StupidCaloriesTracker (safe copy)"
 git push origin gh-pages --force
