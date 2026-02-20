@@ -78,12 +78,12 @@ define(['./workbox-5a5d9309'], (function (workbox) { 'use strict';
    * See https://goo.gl/S9QRab
    */
   workbox.precacheAndRoute([{
-    "url": "/",
+    "url": "/StupidCaloriesTracker/",
     "revision": "0.ao8lhch0br8"
   }], {});
   workbox.cleanupOutdatedCaches();
-  workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("/"), {
-    allowlist: [/^\/$/]
+  workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("/StupidCaloriesTracker/"), {
+    allowlist: [/^\/StupidCaloriesTracker\/$/]
   }));
 
 }));
