@@ -22,8 +22,8 @@ export default defineConfig({
                 theme_color: '#ffffff',
                 background_color: '#ffffff',
                 display: 'standalone',
-                scope: '/stupidCalorieTracker/',
-                start_url: '/stupidCalorieTracker/',
+                scope: '/StupidCaloriesTracker/',
+                start_url: '/StupidCaloriesTracker/',
                 icons: [
                     {
                         src: 'pwa-192x192.png',
