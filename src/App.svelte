@@ -2,7 +2,6 @@
 <script>
   import Router from 'svelte-spa-router';
   import Layout from './routes/+layout.svelte';
-  import { BASE_URL } from '$lib/constants';
 
   import Home from './routes/Home.svelte';
   import Workouts from './routes/Workouts.svelte';
@@ -38,5 +37,5 @@
 </script>
 
 <Layout>
-  <Router {routes} useHash={true} basepath={`/${BASE_URL}`} />
+  <Router {routes} useHash={true} />
 </Layout>
