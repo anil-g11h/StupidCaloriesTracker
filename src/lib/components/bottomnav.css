@@ -1,0 +1,3 @@
+::view-transition-group(bottom-nav) {
+  animation: none; /* Keeps the nav from moving/fading */
+}

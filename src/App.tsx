@@ -11,6 +11,7 @@ import WorkoutList from './routes/workouts/Workouts';
 import WorkoutSessionComponent from './routes/workouts/[id]/WorkoutSession';
 import ExerciseSelector from './routes/workouts/exercises/ExercisesList';
 import NewExercise from './routes/workouts/exercises/new/NewExercise';
+import ProfileAndGoals from './routes/profile/Profile';
 
 function App() {
 return (
@@ -26,6 +27,7 @@ return (
         <Route path="/workouts/:id" element={<WorkoutSessionComponent />} />
         <Route path="/workouts/exercises" element={<ExerciseSelector />} />
         <Route path="/workouts/exercises/new" element={<NewExercise />} />
+        <Route path="/profile" element={<ProfileAndGoals />} />
 
       </Routes>
     </Layout>

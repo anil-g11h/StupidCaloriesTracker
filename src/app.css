@@ -16,3 +16,43 @@
   --color-macro-carbs: #f59e0b;
   --color-macro-fat: #ef4444;
 }
+
+/* 1. Define the sliding animations */
+@keyframes slide-to-left {
+  to { transform: translateX(-100%); }
+}
+@keyframes slide-from-right {
+  from { transform: translateX(100%); }
+}
+@keyframes slide-to-right {
+  to { transform: translateX(100%); }
+}
+@keyframes slide-from-left {
+  from { transform: translateX(-100%); }
+}
+
+/* 2. Forward Transition (Home -> Profile) */
+.transition-forward::view-transition-old(root) {
+  animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both slide-to-left;
+}
+.transition-forward::view-transition-new(root) {
+  animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both slide-from-right;
+}
+
+/* 3. Backward Transition (Profile -> Home) */
+.transition-backward::view-transition-old(root) {
+  animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both slide-to-right;
+}
+.transition-backward::view-transition-new(root) {
+  animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both slide-from-left;
+}
+
+/* 4. Keep the Nav Bar from sliding (Crucial!) */
+nav {
+  view-transition-name: main-nav;
+}
+
+::view-transition-group(main-nav) {
+  animation: none;
+  z-index: 100;
+}
