@@ -3,10 +3,19 @@ import { useNavigate, Link } from 'react-router-dom'; // Assuming React Router
 import { db } from '../../../lib/db';
 import { ESSENTIAL_AMINO_ACIDS } from '../../../lib/constants';
 import { generateId } from '../../../lib';
+import { useStackNavigation } from '../../../lib/useStackNavigation';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+
+
+const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+const geminiModel = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash';
+
 
 const CreateFood: React.FC = () => {
   const navigate = useNavigate();
 
+  const {pop} = useStackNavigation();
   // --- State ---
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -18,6 +27,58 @@ const CreateFood: React.FC = () => {
   const [fat, setFat] = useState<number>(0);
   const [micros, setMicros] = useState<Record<string, number>>({});
   const [aiInput, setAiInput] = useState('');
+
+
+  const [isFetching, setIsFetching] = useState(false);
+
+  const fetchAiData = async () => {
+    if (!name) return alert("Please enter a food name first");
+    if (!geminiApiKey) {
+      return alert("Missing Gemini API key. Set VITE_GEMINI_API_KEY in your .env file.");
+    }
+    
+    setIsFetching(true);
+    try {
+      const genAI = new GoogleGenerativeAI(geminiApiKey);
+      const model = genAI.getGenerativeModel({ 
+        model: geminiModel,
+        generationConfig: { responseMimeType: "application/json" }
+      });
+
+      const prompt = `Act as a clinical nutrition database. Provide the full nutritional profile for "${name}" specifically for a serving size of ${servingSize}${servingUnit}. 
+      Return the data as a JSON object with these keys: "protein", "fat", "carbs", "calories", and "micros" (containing these 9 essential amino acids: Histidine, Isoleucine, Leucine, Lysine, Methionine, Phenylalanine, Threonine, Tryptophan, Valine). 
+      Values must be numbers representing grams.`;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const data = JSON.parse(response.text());
+
+      // Update State
+      setProtein(data.protein || 0);
+      setCarbs(data.carbs || 0);
+      setFat(data.fat || 0);
+      
+      if (data.micros) {
+        const cleanMicros: Record<string, number> = {};
+        ESSENTIAL_AMINO_ACIDS.forEach(amino => {
+          cleanMicros[amino] = data.micros[amino] || 0;
+        });
+        setMicros(cleanMicros);
+      }
+    } catch (err) {
+      console.error("AI Fetch Error:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('not found') || message.includes('404')) {
+        alert(`Gemini model \"${geminiModel}\" is not available for this API key/version. Try setting VITE_GEMINI_MODEL=gemini-2.0-flash (or gemini-2.5-flash) in your .env.`);
+      } else {
+        alert("Failed to fetch nutrition data.");
+      }
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+
 
   // --- Logic ---
   const calories = useMemo(() => {
@@ -59,15 +120,44 @@ All values should be numbers representing grams in that ${servingSize}${servingU
     }
   };
 
+
+    async function handleSubmit() {
+    try {
+      await db.foods.add({
+        id: generateId(),
+        name,
+        brand: brand || undefined,
+        calories,
+        protein,
+        carbs,
+        fat,
+        serving_size: servingSize,
+        serving_unit: servingUnit,
+        micros,
+        is_recipe: false,
+        created_at: new Date(),
+        updated_at: new Date(),
+        synced: 0
+      });
+      pop('/foods');
+    } catch (error) {
+      console.error('Failed to create food:', error);
+      alert('Failed to create food');
+    }
+  }
+
   return (
-    <div className="container mx-auto p-4 max-w-lg bg-page min-h-screen pb-24 text-text-main">
+<div className="container mx-auto p-4 max-w-lg bg-page">
       <header className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-text-main">New Food</h1>
+        <h1 className="text-2xl font-bold">New Food</h1>
         <button 
-          onClick={copyAIPrompt}
-          className="flex items-center gap-1.5 text-xs bg-brand text-brand-fg px-4 py-2 rounded-lg font-bold hover:opacity-90 shadow-sm transition-all"
+          onClick={fetchAiData}
+          disabled={isFetching || !name}
+          className={`flex items-center gap-2 text-xs px-4 py-2 rounded-lg font-bold transition-all ${
+            isFetching ? 'bg-gray-400' : 'bg-brand text-brand-fg hover:opacity-90'
+          }`}
         >
-          <span>✨</span> Copy AI Prompt
+          {isFetching ? '⌛ Fetching...' : '✨ Magic Fill'}
         </button>
       </header>
 
@@ -170,7 +260,7 @@ All values should be numbers representing grams in that ${servingSize}${servingU
         <div className="flex gap-3 pt-4">
           <Link to="/foods" className="flex-1 py-3 text-center font-bold text-text-muted hover:text-text-main transition-colors">Cancel</Link>
           <button 
-            onClick={() => {/* handleSubmit logic */}}
+            onClick={handleSubmit}
             className="flex-[2] py-4 bg-brand text-brand-fg rounded-xl font-black text-lg shadow-lg hover:opacity-90 active:scale-[0.98] transition-all"
           >
             Save Food

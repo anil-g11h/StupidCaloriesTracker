@@ -30,6 +30,7 @@
 		"workbox-window": "^7.4.0"
 	},
 	"dependencies": {
+		"@google/generative-ai": "^0.24.1",
 		"@phosphor-icons/react": "^2.1.10",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
