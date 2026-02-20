@@ -1,19 +1,29 @@
 <script lang="ts">
   import { Home, PlusCircle, User, Clock, Dumbbell } from 'lucide-svelte';
-  import { page } from '$app/stores';
+  // svelte-spa-router: use window.location.hash for active state
+  let currentPath = '';
 
-  let currentPath = $state('');
+  function updatePath() {
+    currentPath = window.location.hash.replace('#', '') || '/';
+  }
 
-  $effect(() => {
-    currentPath = $page.url.pathname;
-  });
+  updatePath();
+  window.addEventListener('hashchange', updatePath);
 
   const links = [
-    { href: '/', label: 'Home', icon: Home },
-    { href: '/log', label: 'Log', icon: PlusCircle },
-    { href: '/time', label: 'Time', icon: Clock },
-    { href: '/workouts', label: 'Gym', icon: Dumbbell },
-    { href: '/profile', label: 'Me', icon: User },
+    { href: '#/', label: 'Home', icon: Home },
+    { href: '#/log', label: 'Log', icon: PlusCircle },
+    // { href: '#/log/add', label: 'Add Log', icon: PlusCircle },
+    { href: '#/time', label: 'Time', icon: Clock },
+    // { href: '#/time/activities', label: 'Activities', icon: Clock },
+    // { href: '#/time/add', label: 'Add Activity', icon: PlusCircle },
+    { href: '#/workouts', label: 'Gym', icon: Dumbbell },
+    // { href: '#/workouts/new', label: 'New Workout', icon: Dumbbell },
+    // { href: '#/workouts/exercises', label: 'Exercises', icon: Dumbbell },
+    // { href: '#/foods', label: 'Foods', icon: PlusCircle },
+    // { href: '#/foods/new', label: 'New Food', icon: PlusCircle },
+    // { href: '#/foods/new-recipe', label: 'New Recipe', icon: PlusCircle },
+    { href: '#/profile', label: 'Me', icon: User },
   ];
 </script>
 
@@ -22,10 +32,10 @@
     {#each links as link}
       {@const Icon = link.icon}
       <a 
-        href={link.href} 
+        href={link.href}
         class="flex flex-col items-center justify-center w-full h-full space-y-1 text-xs font-medium transition-colors"
-        class:text-brand={currentPath === link.href}
-        class:text-text-muted={currentPath !== link.href}
+        class:text-brand={currentPath === link.href.replace('#', '')}
+        class:text-text-muted={currentPath !== link.href.replace('#', '')}
       >
         <Icon size={20} strokeWidth={2.5} />
         <span>{link.label}</span>

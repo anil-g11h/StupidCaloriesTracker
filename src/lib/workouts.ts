@@ -1,4 +1,4 @@
-import { db, type WorkoutLogEntry, type WorkoutSet, type Workout } from '$lib/db';
+import { db, type WorkoutLogEntry, type WorkoutSet, type Workout } from './db';
 
 export type MetricType = 
   | 'weight_reps' 

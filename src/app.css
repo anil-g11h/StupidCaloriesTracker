@@ -1,63 +1,18 @@
 @import "tailwindcss";
 
-html, body {
-  /* Prevent overscroll bounce which shows browser chrome */
-  overscroll-behavior-y: none;
-  /* Prevent pull-to-refresh */
-  overscroll-behavior: none;
-  /* Prevent double-tap zoom */
-  touch-action: manipulation;
-}
+@theme {
+  --color-page: #f8fafc;
+  --color-card: #ffffff;
+  --color-surface: #f1f5f9;
+  --color-border-subtle: #e2e8f0;
 
-/* Removed unknown @theme rule */
-/* Semantic Colors */
-:root {
-  --color-page: var(--bg-page);
-  --color-card: var(--bg-card);
-  --color-surface: var(--bg-surface);
-  
-  --color-brand: var(--brand);
-  --color-brand-fg: var(--brand-fg);
-  
-  --color-text-main: var(--text-main);
-  --color-text-muted: var(--text-muted);
-  --color-border-subtle: var(--border-subtle);
+  --color-text-main: #0f172a;
+  --color-text-muted: #64748b;
 
-  /* Macros */
-  --color-macro-protein: var(--macro-protein);
-  --color-macro-carbs: var(--macro-carbs);
-  --color-macro-fat: var(--macro-fat);
-}
+  --color-brand: #3b82f6;
+  --color-brand-fg: #ffffff;
 
-:root {
-    /* Base - Zinc (Neutral) */
-    --bg-page: #fafafa; /* zinc-50 */
-    --bg-card: #ffffff;
-    --bg-surface: #f4f4f5; /* zinc-100 */
-    
-    --brand: #18181b; /* zinc-900 */
-    --brand-fg: #fafafa;
-    
-    --text-main: #18181b;
-    --text-muted: #71717a; /* zinc-500 */
-    --border-subtle: #e4e4e7; /* zinc-200 */
-
-    /* Macros */
-    --macro-protein: #a855f7; /* purple-500 */
-    --macro-carbs: #f97316; /* orange-500 */
-    --macro-fat: #eab308; /* yellow-500 */
-}
-
-/* Dark Mode - Zinc */
-.dark {
-    --bg-page: #09090b; /* zinc-950 */
-    --bg-card: #18181b; /* zinc-900 */
-    --bg-surface: #27272a; /* zinc-800 */
-    
-    --brand: #fafafa; /* zinc-50 */
-    --brand-fg: #18181b; /* zinc-900 */
-    
-    --text-main: #fafafa; /* zinc-50 */
-    --text-muted: #a1a1aa; /* zinc-400 */
-    --border-subtle: #27272a; /* zinc-800 */
+  --color-macro-protein: #10b981;
+  --color-macro-carbs: #f59e0b;
+  --color-macro-fat: #ef4444;
 }

@@ -25,6 +25,7 @@ create table if not exists public.workouts (
 -- Workout Log Entries (Exercises performed in a workout)
 create table if not exists public.workout_log_entries (
   id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) not null,
   workout_id uuid references public.workouts(id) on delete cascade not null,
   exercise_id uuid references public.workout_exercises_def(id) not null,
   sort_order integer not null default 0,
@@ -58,18 +59,18 @@ create policy "Allow public exercises read access" on public.workout_exercises_d
 create policy "Allow users to manage own exercises" on public.workout_exercises_def for all using (auth.uid() = user_id);
 
 -- Workouts: User private
+drop policy if exists "Allow users to manage own workouts" on public.workouts;
 create policy "Allow users to manage own workouts" on public.workouts for all using (auth.uid() = user_id);
 
 -- Entries: User private (via workout ownership, but safer to be specific or join)
-create policy "Allow users to manage own entries" on public.workout_log_entries for all using (
-    exists (select 1 from public.workouts where id = workout_id and user_id = auth.uid())
-);
+drop policy if exists "Allow users to manage own entries" on public.workout_log_entries;
+create policy "Allow users to manage own entries" on public.workout_log_entries for all using (auth.uid() = user_id);
 
 -- Sets: User private
+drop policy if exists "Allow users to manage own sets" on public.workout_sets;
 create policy "Allow users to manage own sets" on public.workout_sets for all using (
     exists (
         select 1 from public.workout_log_entries wle
-        join public.workouts w on w.id = wle.workout_id
-        where wle.id = workout_log_entry_id and w.user_id = auth.uid()
+        where wle.id = workout_log_entry_id and wle.user_id = auth.uid()
     )
 );

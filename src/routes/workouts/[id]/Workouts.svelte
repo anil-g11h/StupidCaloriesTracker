@@ -2,14 +2,32 @@
   import { db, type Workout, type WorkoutExerciseDef, type WorkoutLogEntry, type WorkoutSet } from '$lib/db';
   import { liveQuery } from 'dexie';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
-  import { browser } from '$app/environment';
+  import { push as goto, pop, replace } from 'svelte-spa-router';
   import { Plus, Check, Trash, MoreVertical, X, Settings, Timer, ChevronDown, ChevronUp } from 'lucide-svelte';
   import { generateId } from '$lib';
   import { getMetricConfig, getPreviousWorkoutSets, formatSet, type MetricType, METRIC_TYPES } from '$lib/workouts';
 
-  let workoutId = $page.params.id;
+
+
+const { params } = $props();
+let workoutId = params?.id;
+console.log('Loaded workoutId:', workoutId);
+
+onMount(async () => {
+    // If workoutId is missing or 'new', create a new workout and redirect
+    if (!workoutId || workoutId === 'new') {
+        const newWorkout: Partial<Workout> = {
+            id: generateId(),
+            name: 'New Workout',
+            start_time: new Date(),
+            synced: 0
+        };
+        await db.workouts.add(newWorkout as Workout);
+        workoutId = newWorkout.id;
+        goto(`/workouts/${workoutId}`);
+        return;
+    }
+});
   
   // Data State
   let workout = $state<Workout | undefined>(undefined);
@@ -28,7 +46,7 @@
   let silentAudio: HTMLAudioElement;
 
   function loadRestPreferences() {
-      if (!browser) return;
+      if (typeof window === 'undefined') return;
       try {
           const stored = localStorage.getItem('rest_timer_preferences');
           if (stored) {
@@ -45,7 +63,7 @@
 
   function saveRestTime(exerciseId: string, seconds: number) {
       restPreferences[exerciseId] = seconds;
-      if (browser) {
+      if (typeof window !== 'undefined') {
           localStorage.setItem('rest_timer_preferences', JSON.stringify(restPreferences));
       }
   }
@@ -69,7 +87,7 @@
   // Load initial data
   onMount(() => {
       loadRestPreferences();
-      if (browser && 'serviceWorker' in navigator) {
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
           navigator.serviceWorker.addEventListener('message', (event) => {
              if (event.data.type === 'TIMER_ACTION') {
                  handleTimerAction(event.data.action);
@@ -375,24 +393,50 @@
               }
           }
       }, 1000);
-        //            duration_seconds: last.duration_seconds
-        //        };
-        //   }
-        // });      }
-      // removed extra closing brace
+  }
 
-    //   await db.workout_sets.add({
-    //       id: generateId(),
-    //       workout_log_entry_id: entry.id,
-    //       set_number: setNumber,
-    //       weight: defaults.weight || 0,
-    //       reps: defaults.reps || 0,
-    //       distance: defaults.distance || 0,
-    //       duration_seconds: defaults.duration_seconds || 0,
-    //       completed: false,
-    //       created_at: new Date(),
-    //       synced: 0
-    //   });
+  async function addSet(entry: WorkoutLogEntry) {
+      const currentSets = sets[entry.id] || [];
+      const setNumber = currentSets.length + 1;
+      
+      // Get defaults from previous set if exists
+      let defaults: Partial<WorkoutSet> = {};
+      if (currentSets.length > 0) {
+          const last = currentSets[currentSets.length - 1];
+          defaults = {
+              weight: last.weight,
+              reps: last.reps,
+              distance: last.distance,
+              duration_seconds: last.duration_seconds
+          };
+      }
+
+      await db.workout_sets.add({
+          id: generateId(),
+          workout_log_entry_id: entry.id,
+          set_number: setNumber,
+          weight: defaults.weight || 0,
+          reps: defaults.reps || 0,
+          distance: defaults.distance || 0,
+          duration_seconds: defaults.duration_seconds || 0,
+          completed: false,
+          created_at: new Date(),
+          synced: 0
+      });
+  }
+
+  async function finishWorkout() {
+      if (!workoutId) return;
+      await db.workouts.update(workoutId, { end_time: new Date(), synced: 0 });
+      pop();
+  }
+
+  async function cancelWorkout() {
+      if (!workoutId || !confirm('Discard workout?')) return;
+      // Cleanup logic could go here, but for now just delete the workout
+      await db.workouts.delete(workoutId);
+      // Entries and sets should ideally be cascaded or cleaned up
+      pop();
   }
 
   async function toggleSetComplete(set: WorkoutSet, entryId: string, exerciseDefId: string) {
@@ -654,7 +698,7 @@
 
       <div class="pt-2">
         <a 
-            href="{base}/workouts/exercises?workoutId={workoutId}"
+            href={`#/workouts/exercises?workoutId=${workoutId}`}
             class="group flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border-subtle p-6 text-center transition-colors hover:border-brand hover:bg-brand/5"
         >
             <div class="rounded-full bg-surface-secondary p-3 transition-colors group-hover:bg-brand group-hover:text-white mb-2 text-text-muted">

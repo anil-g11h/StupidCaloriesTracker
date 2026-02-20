@@ -226,7 +226,7 @@
   </div>
 
   <div class="flex justify-end gap-3">
-     <a href="/foods" class="px-5 py-2 border rounded hover:bg-gray-100">Cancel</a>
+     <a href="#/foods" class="px-5 py-2 border rounded hover:bg-gray-100">Cancel</a>
      <button 
        onclick={saveRecipe}
        class="px-5 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 shadow"

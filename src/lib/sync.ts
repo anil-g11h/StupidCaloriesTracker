@@ -1,5 +1,5 @@
 import { db, type SyncQueue } from '$lib/db';
-import { supabase } from '$lib/supabaseClient';
+import { supabase } from './supabaseClient';
 import Dexie from 'dexie';
 
 const SYNC_INTERVAL_MS = 30000; // 30 seconds
