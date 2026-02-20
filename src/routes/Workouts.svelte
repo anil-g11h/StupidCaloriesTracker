@@ -26,7 +26,7 @@
 <div class="pb-24 pt-4 px-4 max-w-md mx-auto">
 	<header class="flex justify-between items-center mb-6">
 		<h1 class="text-2xl font-bold">Workouts</h1>
-		<a href="#/workouts/new" class="bg-brand text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 hover:bg-brand-dark transition-colors">
+		<a href={`/${BASE_URL}/#/workouts/new`} class="bg-brand text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 hover:bg-brand-dark transition-colors">
 			<Plus size={18} />
 			Start Workout 1
 		</a>
@@ -43,7 +43,7 @@
 	{:else}
 		<div class="space-y-3">
 			{#each workouts as workout (workout.id)}
-				<a href={`#/workouts/${workout.id}`} class="block bg-card rounded-xl p-4 shadow-sm border border-border-subtle hover:border-brand-light transition-colors">
+				<a href={`/${BASE_URL}/#/workouts/${workout.id}`} class="block bg-card rounded-xl p-4 shadow-sm border border-border-subtle hover:border-brand-light transition-colors">
 						<div class="flex justify-between items-start">
 								<div>
 										<h3 class="font-semibold text-lg">{workout.name || 'Untitled Workout'}</h3>

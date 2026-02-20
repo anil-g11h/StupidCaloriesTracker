@@ -18,10 +18,10 @@
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold">Foods</h1>
     <div class="space-x-2">
-      <a href="#/foods/new" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+      <a href={`/${BASE_URL}/#/foods/new`} class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
         Add Food
       </a>
-      <a href="#/foods/new-recipe" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+      <a href={`/${BASE_URL}/#/foods/new-recipe`} class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
         Create Recipe
       </a>
     </div>
@@ -41,7 +41,7 @@
   {:else}
     <div class="grid gap-4">
       {#each filteredFoods as food (food.id)}
-        <a href={`#/foods/${food.id}`} class="bg-card p-4 rounded-xl shadow-sm border border-border-subtle flex justify-between items-center hover:bg-surface transition-colors block cursor-pointer">
+        <a href={`/${BASE_URL}/#/foods/${food.id}`} class="bg-card p-4 rounded-xl shadow-sm border border-border-subtle flex justify-between items-center hover:bg-surface transition-colors block cursor-pointer">
           <div>
             <h3 class="font-bold text-lg text-text-main">{food.name}</h3>
             {#if food.brand}

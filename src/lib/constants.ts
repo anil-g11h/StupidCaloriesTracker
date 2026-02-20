@@ -1,3 +1,5 @@
+// Global app constants
+export const BASE_URL = 'StupidCaloriesTracker';
 export const ESSENTIAL_AMINO_ACIDS = [
 	'Histidine',
 	'Isoleucine',
