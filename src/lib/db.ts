@@ -6,6 +6,13 @@ export interface Profile {
   username?: string;
   full_name?: string;
   avatar_url?: string;
+  diet_tags?: string[];
+  allergies?: string[];
+  custom_allergies?: string[];
+  goal_focus?: string;
+  activity_level?: string;
+  medical_constraints?: string[];
+  meal_pattern?: string;
   updated_at?: Date;
   synced?: number;
 }
@@ -15,6 +22,9 @@ export interface Food {
   user_id?: string | null; // null for public foods
   name: string;
   brand?: string;
+  diet_tags?: string[];
+  allergen_tags?: string[];
+  ai_notes?: string;
   calories: number;
   protein: number;
   carbs: number;

@@ -4,6 +4,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Food } from '../../../lib/db';
 import { generateId } from '../../../lib';
     import { analyzeEaaRatio, scoreFoodForEaaDeficit, type EaaRatioGroupKey } from '../../../lib/eaa';
+import { supabase } from '../../../lib/supabaseClient';
+import {
+  getDietaryConflictWarnings,
+  hasDietaryPreferences,
+  normalizeDietaryPreferences
+} from '../../../lib/dietaryProfile';
 
 const WEIGHT_BASED_REGEX = /^(g|ml|oz)$/i;
 
@@ -88,8 +94,34 @@ export default function AddLogEntry() {
   const [addedCount, setAddedCount] = useState(0);
   const [addedFoodIds, setAddedFoodIds] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<'default' | 'eaa-gap'>('default');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const settingsRow = useLiveQuery(async () => db.settings.get('local-settings'), []);
+  const profileRow = useLiveQuery(
+    async () => {
+      if (!currentUserId) return undefined;
+      return db.profiles.get(currentUserId);
+    },
+    [currentUserId],
+    undefined
+  );
+
+  const dietaryPreferences = useMemo(() => normalizeDietaryPreferences(profileRow), [profileRow]);
+  const hasDietaryProfile = useMemo(() => hasDietaryPreferences(dietaryPreferences), [dietaryPreferences]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUserId(session?.user?.id ?? null);
+    });
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUserId(session?.user?.id ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const mealLogs = useLiveQuery(async () => {
     const normalizedMealType = mealType.trim().toLowerCase();
@@ -250,6 +282,54 @@ export default function AddLogEntry() {
         return b.food.protein - a.food.protein;
       });
   }, [searchResults, sortMode, eaaDeficit]);
+
+  const foodWarningsById = useLiveQuery(
+    async () => {
+      if (!hasDietaryProfile || rankedSearchResults.length === 0) return {} as Record<string, string[]>;
+
+      const parentFoodIds = rankedSearchResults.map((item) => item.food.id);
+      const ingredientRows = await db.food_ingredients.where('parent_food_id').anyOf(parentFoodIds).toArray();
+
+      const childFoodIds = [...new Set(ingredientRows.map((item) => item.child_food_id))];
+      const childFoods = childFoodIds.length > 0 ? await db.foods.where('id').anyOf(childFoodIds).toArray() : [];
+      const childFoodNameById = childFoods.reduce<Record<string, string>>((acc, food) => {
+        acc[food.id] = food.name;
+        return acc;
+      }, {});
+
+      const ingredientNamesByParent = ingredientRows.reduce<Record<string, string[]>>((acc, row) => {
+        if (!acc[row.parent_food_id]) acc[row.parent_food_id] = [];
+        const ingredientName = childFoodNameById[row.child_food_id];
+        if (ingredientName) acc[row.parent_food_id].push(ingredientName);
+        return acc;
+      }, {});
+
+      return rankedSearchResults.reduce<Record<string, string[]>>((acc, item) => {
+        const warnings = getDietaryConflictWarnings(dietaryPreferences, item.food, ingredientNamesByParent[item.food.id] || []);
+        if (warnings.length > 0) {
+          acc[item.food.id] = warnings;
+        }
+        return acc;
+      }, {});
+    },
+    [rankedSearchResults, dietaryPreferences, hasDietaryProfile],
+    {} as Record<string, string[]>
+  );
+
+  const selectedFoodWarnings = useLiveQuery(
+    async () => {
+      if (!hasDietaryProfile || !selectedFood) return [] as string[];
+
+      const ingredientRows = await db.food_ingredients.where('parent_food_id').equals(selectedFood.id).toArray();
+      const childFoodIds = [...new Set(ingredientRows.map((item) => item.child_food_id))];
+      const childFoods = childFoodIds.length > 0 ? await db.foods.where('id').anyOf(childFoodIds).toArray() : [];
+      const ingredientNames = childFoods.map((food) => food.name);
+
+      return getDietaryConflictWarnings(dietaryPreferences, selectedFood, ingredientNames);
+    },
+    [selectedFood?.id, dietaryPreferences, hasDietaryProfile],
+    [] as string[]
+  );
 
   const eaaGuidance = useMemo(() => {
     if (!selectedFood) {
@@ -583,6 +663,7 @@ export default function AddLogEntry() {
           <div className="space-y-2">
             {rankedSearchResults?.map(({ food, score, bestGroup }) => {
               const alreadyAdded = mealLogIdsByFood.has(food.id) || addedFoodIds.includes(food.id);
+              const warnings = foodWarningsById[food.id] || [];
 
               const bestGroupLabel =
                 bestGroup === 'leucine'
@@ -618,6 +699,12 @@ export default function AddLogEntry() {
                       carbs={food.carbs}
                       fat={food.fat}
                     />
+                    {warnings.length > 0 && (
+                      <div className="text-[11px] text-text-main mt-1">
+                        ⚠ {warnings[0]}
+                        {warnings.length > 1 ? ` +${warnings.length - 1} more` : ''}
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -654,6 +741,17 @@ export default function AddLogEntry() {
             <StatBox value={`${stats.carbs}g`} label="Carb" color="text-macro-carbs" />
             <StatBox value={`${stats.fat}g`} label="Fat" color="text-macro-fat" />
           </div>
+
+          {selectedFoodWarnings.length > 0 && (
+            <div className="mb-4 bg-surface border border-border-subtle rounded-lg p-3">
+              <p className="text-xs font-bold text-text-main mb-1">Dietary conflict warning</p>
+              <ul className="text-xs text-text-main space-y-1">
+                {selectedFoodWarnings.map((warning) => (
+                  <li key={warning}>• {warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">

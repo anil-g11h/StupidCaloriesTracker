@@ -4,6 +4,13 @@ create table if not exists public.profiles (
   username text unique,
   full_name text,
   avatar_url text,
+  diet_tags text[] not null default '{}',
+  allergies text[] not null default '{}',
+  custom_allergies text[] not null default '{}',
+  goal_focus text,
+  activity_level text,
+  medical_constraints text[] not null default '{}',
+  meal_pattern text,
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -13,6 +20,9 @@ create table if not exists public.foods (
   user_id uuid references auth.users(id), -- Null means global/public food
   name text not null,
   brand text,
+  diet_tags text[] not null default '{}',
+  allergen_tags text[] not null default '{}',
+  ai_notes text,
   calories numeric not null default 0, -- per serving
   protein numeric not null default 0,
   carbs numeric not null default 0,
@@ -86,6 +96,9 @@ create policy "Allow users to read own profile" on public.profiles for select us
 
 drop policy if exists "Allow users to update own profile" on public.profiles;
 create policy "Allow users to update own profile" on public.profiles for update using (auth.uid() = id);
+
+drop policy if exists "Allow users to insert own profile" on public.profiles;
+create policy "Allow users to insert own profile" on public.profiles for insert with check (auth.uid() = id);
 
 -- Foods: Users can read public foods or their own foods
 drop policy if exists "Allow public foods read access" on public.foods;

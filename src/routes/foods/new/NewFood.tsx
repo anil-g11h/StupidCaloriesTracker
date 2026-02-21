@@ -69,6 +69,30 @@ const MICROS_UNIT_CONTRACT_TEXT = [
   '- Vitamin C, Vitamin E, Vitamin B6, Calcium, Magnesium, Potassium, Zinc, Iron, Sodium: milligrams (mg)'
 ].join('\n');
 
+const FOOD_DIET_TAG_OPTIONS = [
+  { id: 'veg', label: 'Vegetarian' },
+  { id: 'non_veg', label: 'Non-Veg' },
+  { id: 'contains_egg', label: 'Contains Egg' },
+  { id: 'vegan', label: 'Vegan' },
+  { id: 'contains_dairy', label: 'Contains Dairy' },
+  { id: 'contains_onion_garlic', label: 'Contains Onion/Garlic' },
+  { id: 'contains_root_vegetables', label: 'Contains Root Veg' }
+] as const;
+
+const FOOD_ALLERGEN_OPTIONS = [
+  { id: 'milk', label: 'Milk / Dairy' },
+  { id: 'soy', label: 'Soy' },
+  { id: 'egg', label: 'Egg' },
+  { id: 'peanut', label: 'Peanut' },
+  { id: 'tree_nut', label: 'Tree Nut' },
+  { id: 'wheat_gluten', label: 'Wheat / Gluten' },
+  { id: 'sesame', label: 'Sesame' },
+  { id: 'shellfish', label: 'Shellfish' }
+] as const;
+
+const ALLOWED_FOOD_DIET_TAGS = new Set(FOOD_DIET_TAG_OPTIONS.map((item) => item.id));
+const ALLOWED_FOOD_ALLERGEN_TAGS = new Set(FOOD_ALLERGEN_OPTIONS.map((item) => item.id));
+
 const KEY_ALIASES: Record<string, string[]> = {
   'Vitamin A': ['Vitamin A', 'vitamin_a', 'retinol', 'vitamin a rae'],
   'Vitamin C': ['Vitamin C', 'vitamin_c', 'ascorbic acid'],
@@ -149,6 +173,14 @@ const parseAiJsonFromText = (rawValue: string): Record<string, any> | null => {
   }
 };
 
+const normalizeTagArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))];
+};
+
+const filterAllowedTags = (values: string[], allowedSet: Set<string>) =>
+  values.filter((value) => allowedSet.has(value));
+
 
 const CreateFood: React.FC = () => {
   const navigate = useNavigate();
@@ -164,6 +196,9 @@ const CreateFood: React.FC = () => {
   const [carbs, setCarbs] = useState<number>(0);
   const [fat, setFat] = useState<number>(0);
   const [micros, setMicros] = useState<Record<string, number>>({});
+  const [dietTags, setDietTags] = useState<string[]>([]);
+  const [allergenTags, setAllergenTags] = useState<string[]>([]);
+  const [aiNotes, setAiNotes] = useState('');
   const [aiInput, setAiInput] = useState('');
   const [showAiPasteInput, setShowAiPasteInput] = useState(false);
 
@@ -185,7 +220,7 @@ const CreateFood: React.FC = () => {
       });
 
       const prompt = `Act as a clinical nutrition database. Provide the full nutritional profile for "${name}" specifically for a serving size of ${servingSize}${servingUnit}.
-    Return data ONLY as raw JSON with keys: "protein", "fat", "carbs", "calories", "micros".
+    Return data ONLY as raw JSON with keys: "protein", "fat", "carbs", "calories", "micros", "diet_tags", "allergen_tags", "ai_notes".
 
     EXACT_MICROS_KEYS:
     ${EXACT_MICROS_KEYS_TEXT}
@@ -193,9 +228,18 @@ const CreateFood: React.FC = () => {
     MICROS_UNIT_CONTRACT:
     ${MICROS_UNIT_CONTRACT_TEXT}
 
+    FOOD_DIET_TAG_ALLOWED_VALUES:
+    ${[...ALLOWED_FOOD_DIET_TAGS].join(', ')}
+
+    FOOD_ALLERGEN_TAG_ALLOWED_VALUES:
+    ${[...ALLOWED_FOOD_ALLERGEN_TAGS].join(', ')}
+
+    ai_notes should be 1-2 short lines to help manual review (ingredient assumptions and uncertainty).
+
     Do not include units in keys or values.
     If any nutrient is not available, set value to 0.
-    All values must be numeric (no strings, no units, no markdown, no prose, no extra keys).`;
+    Arrays must contain only allowed values.
+    All numeric values must be numbers (no strings, no units, no markdown, no prose, no extra keys).`;
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
@@ -213,6 +257,10 @@ const CreateFood: React.FC = () => {
         });
         setMicros(cleanMicros);
       }
+
+      setDietTags(filterAllowedTags(normalizeTagArray(data.diet_tags), ALLOWED_FOOD_DIET_TAGS));
+      setAllergenTags(filterAllowedTags(normalizeTagArray(data.allergen_tags), ALLOWED_FOOD_ALLERGEN_TAGS));
+      setAiNotes(typeof data.ai_notes === 'string' ? data.ai_notes.trim() : '');
     } catch (err) {
       console.error("AI Fetch Error:", err);
       const message = err instanceof Error ? err.message : String(err);
@@ -236,7 +284,7 @@ const CreateFood: React.FC = () => {
   const copyAIPrompt = () => {
     const foodTarget = name || "[INSERT FOOD NAME]";
     const prompt = `Act as a clinical nutrition database. Provide the full nutritional profile for "${foodTarget}" specifically for a serving size of ${servingSize}${servingUnit}.
-  Return data ONLY as raw JSON with keys: "protein", "fat", "carbs", "calories", "micros".
+  Return data ONLY as raw JSON with keys: "protein", "fat", "carbs", "calories", "micros", "diet_tags", "allergen_tags", "ai_notes".
 
   EXACT_MICROS_KEYS:
   ${EXACT_MICROS_KEYS_TEXT}
@@ -244,9 +292,18 @@ const CreateFood: React.FC = () => {
   MICROS_UNIT_CONTRACT:
   ${MICROS_UNIT_CONTRACT_TEXT}
 
+  FOOD_DIET_TAG_ALLOWED_VALUES:
+  ${[...ALLOWED_FOOD_DIET_TAGS].join(', ')}
+
+  FOOD_ALLERGEN_TAG_ALLOWED_VALUES:
+  ${[...ALLOWED_FOOD_ALLERGEN_TAGS].join(', ')}
+
+  ai_notes should be 1-2 short lines to help manual review (ingredient assumptions and uncertainty).
+
   Do not include units in keys or values.
   If any nutrient is not available, set value to 0.
-  All values must be numeric (no strings, no units, no markdown, no prose, no extra keys).`;
+  Arrays must contain only allowed values.
+  All numeric values must be numbers (no strings, no units, no markdown, no prose, no extra keys).`;
     
     navigator.clipboard.writeText(prompt);
     alert(`Prompt for ${servingSize}${servingUnit} copied!`);
@@ -284,9 +341,29 @@ const CreateFood: React.FC = () => {
 
         setMicros(cleanMicros);
       }
+
+      if (data.diet_tags !== undefined) {
+        setDietTags(filterAllowedTags(normalizeTagArray(data.diet_tags), ALLOWED_FOOD_DIET_TAGS));
+      }
+
+      if (data.allergen_tags !== undefined) {
+        setAllergenTags(filterAllowedTags(normalizeTagArray(data.allergen_tags), ALLOWED_FOOD_ALLERGEN_TAGS));
+      }
+
+      if (data.ai_notes !== undefined) {
+        setAiNotes(typeof data.ai_notes === 'string' ? data.ai_notes.trim() : '');
+      }
     } catch (err) {
       console.error("Parse error", err);
     }
+  };
+
+  const toggleDietTag = (tag: string) => {
+    setDietTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]));
+  };
+
+  const toggleAllergenTag = (tag: string) => {
+    setAllergenTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]));
   };
 
 
@@ -296,6 +373,9 @@ const CreateFood: React.FC = () => {
         id: generateId(),
         name,
         brand: brand || undefined,
+        diet_tags: dietTags,
+        allergen_tags: allergenTags,
+        ai_notes: aiNotes || undefined,
         calories,
         protein,
         carbs,
@@ -397,6 +477,56 @@ const CreateFood: React.FC = () => {
               <option value="serving">Serving</option>
             </select>
           </div>
+        </div>
+
+        <div className="space-y-3 p-4 bg-surface rounded-xl border border-border-subtle">
+          <label className="block text-[10px] font-bold text-text-muted uppercase tracking-widest">Food Dietary Tags</label>
+          <div className="flex flex-wrap gap-2">
+            {FOOD_DIET_TAG_OPTIONS.map((option) => {
+              const active = dietTags.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => toggleDietTag(option.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                    active
+                      ? 'bg-brand text-brand-fg border-brand'
+                      : 'bg-card text-text-muted hover:text-text-main border-border-subtle'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-3 p-4 bg-surface rounded-xl border border-border-subtle">
+          <label className="block text-[10px] font-bold text-text-muted uppercase tracking-widest">Allergen Tags</label>
+          <div className="grid grid-cols-2 gap-2">
+            {FOOD_ALLERGEN_OPTIONS.map((option) => (
+              <label key={option.id} className="inline-flex items-center gap-2 bg-card border border-border-subtle rounded-lg px-2.5 py-2">
+                <input
+                  type="checkbox"
+                  checked={allergenTags.includes(option.id)}
+                  onChange={() => toggleAllergenTag(option.id)}
+                  className="h-4 w-4 rounded border-border-subtle bg-surface"
+                />
+                <span className="text-xs text-text-main">{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-[10px] font-bold text-text-muted uppercase tracking-widest">AI Notes (Auto + Editable)</label>
+          <textarea
+            value={aiNotes}
+            onChange={(e) => setAiNotes(e.target.value)}
+            placeholder="AI can add ingredient assumptions and caution notes here."
+            className="w-full min-h-20 p-3 text-sm border border-border-subtle rounded-lg focus:ring-2 focus:ring-brand focus:outline-none bg-card text-text-main"
+          />
         </div>
 
         {/* Macros Grid */}

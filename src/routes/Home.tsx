@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
-import { db, type Food, type Goal, type UserSettings } from '../lib/db';
+import { db, type BodyMetric, type Food, type Goal, type UserSettings } from '../lib/db';
+import { generateId } from '../lib';
+import { supabase } from '../lib/supabaseClient';
 
 type SettingsRow = UserSettings & { id: 'local-settings' };
 
@@ -40,8 +42,33 @@ export default function Home() {
   const now = new Date();
   const today = useMemo(() => toYyyyMmDd(now), [now]);
   const weekStartIso = useMemo(() => getWeekStart(now).toISOString(), [now]);
+  const [currentUserId, setCurrentUserId] = useState<string>('local-user');
   const [trackedGoals, setTrackedGoals] = useState<Record<string, boolean>>({});
   const [daySummary, setDaySummary] = useState('');
+  const [weightForm, setWeightForm] = useState({
+    date: today,
+    value: '',
+    unit: 'kg'
+  });
+
+  const recentWeight = useLiveQuery(
+    async () => {
+      const list = await db.metrics
+        .where('type')
+        .equals('weight')
+        .and((row) => row.user_id === currentUserId)
+        .toArray();
+
+      return list
+        .sort((a, b) => {
+          if (a.date === b.date) return (b.created_at?.getTime() ?? 0) - (a.created_at?.getTime() ?? 0);
+          return a.date < b.date ? 1 : -1;
+        })
+        .slice(0, 7);
+    },
+    [currentUserId],
+    [] as BodyMetric[]
+  );
 
   const data = useLiveQuery(async () => {
     const [todayLogs, settings, workouts, goal] = await Promise.all([
@@ -134,6 +161,20 @@ export default function Home() {
   const completedTrackedCount = trackableGoals.filter((goal) => trackedGoals[goal.id]).length;
 
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUserId(session?.user?.id ?? 'local-user');
+    });
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUserId(session?.user?.id ?? 'local-user');
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
 
     try {
@@ -159,6 +200,35 @@ export default function Home() {
 
   const handleGoalToggle = (goalId: string) => {
     setTrackedGoals((prev) => ({ ...prev, [goalId]: !prev[goalId] }));
+  };
+
+  const addWeight = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const value = Number(weightForm.value);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      alert('Enter a valid weight');
+      return;
+    }
+
+    try {
+      const metric: BodyMetric = {
+        id: generateId(),
+        user_id: currentUserId,
+        date: weightForm.date || today,
+        type: 'weight',
+        value: Math.round(value * 10) / 10,
+        unit: weightForm.unit,
+        synced: 0,
+        created_at: new Date()
+      };
+
+      await db.metrics.put(metric);
+      setWeightForm((prev) => ({ ...prev, value: '' }));
+    } catch (error) {
+      console.error(error);
+      alert('Failed to add weight');
+    }
   };
 
   return (
@@ -247,6 +317,62 @@ export default function Home() {
           </div>
           <p className="mt-3 text-xs font-medium text-text-muted">Total workouts logged: {data?.workoutsCount ?? 0}</p>
         </Link>
+
+        <section className="bg-card rounded-2xl p-5 border border-border-subtle shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-bold uppercase tracking-wide text-text-muted">Weight log</p>
+            <Link to="/profile" className="text-xs font-medium text-text-muted hover:text-text-main">
+              Profile
+            </Link>
+          </div>
+
+          <form onSubmit={addWeight} className="grid grid-cols-3 gap-2 mt-3 mb-3">
+            <input
+              type="date"
+              value={weightForm.date}
+              onChange={(e) => setWeightForm((prev) => ({ ...prev, date: e.target.value }))}
+              className="col-span-2 p-2.5 rounded-xl border border-border-subtle bg-surface text-text-main text-sm"
+            />
+            <select
+              value={weightForm.unit}
+              onChange={(e) => setWeightForm((prev) => ({ ...prev, unit: e.target.value }))}
+              className="col-span-1 p-2.5 rounded-xl border border-border-subtle bg-surface text-text-main text-sm"
+            >
+              <option value="kg">kg</option>
+              <option value="lb">lb</option>
+            </select>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              value={weightForm.value}
+              onChange={(e) => setWeightForm((prev) => ({ ...prev, value: e.target.value }))}
+              placeholder="Weight"
+              className="col-span-2 p-2.5 rounded-xl border border-border-subtle bg-surface text-text-main text-sm"
+            />
+            <button
+              type="submit"
+              className="col-span-1 py-2.5 rounded-xl bg-brand text-brand-fg font-bold text-xs hover:opacity-90 transition-opacity"
+            >
+              Add
+            </button>
+          </form>
+
+          <div className="space-y-2">
+            {recentWeight.length === 0 ? (
+              <p className="text-xs text-text-muted">No recent weight entries.</p>
+            ) : (
+              recentWeight.map((entry) => (
+                <div key={entry.id} className="bg-surface rounded-lg px-3 py-2 flex items-center justify-between">
+                  <p className="text-xs text-text-muted">{entry.date}</p>
+                  <p className="text-sm font-semibold text-text-main">
+                    {entry.value} {entry.unit}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
 
         <section className="bg-card rounded-2xl p-5 border border-border-subtle shadow-sm">
           <div className="flex items-center justify-between gap-3">
