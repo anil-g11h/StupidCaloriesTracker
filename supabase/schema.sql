@@ -207,6 +207,8 @@ create table if not exists public.workout_sets (
   set_number integer not null default 1,
   weight numeric,
   reps numeric,
+  reps_min numeric,
+  reps_max numeric,
   distance numeric, -- in meters or km? let's stick to standard unit (e.g. km or meters)
   duration_seconds integer,
   rpe numeric, -- Rate of Perceived Exertion (1-10)
@@ -215,11 +217,56 @@ create table if not exists public.workout_sets (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+create table if not exists public.workout_routines (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) not null,
+  name text not null,
+  notes text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.workout_routine_entries (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) not null,
+  routine_id uuid references public.workout_routines(id) on delete cascade not null,
+  exercise_id uuid references public.workout_exercises_def(id) not null,
+  sort_order integer not null default 0,
+  notes text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.workout_routine_sets (
+  id uuid default gen_random_uuid() primary key,
+  routine_entry_id uuid references public.workout_routine_entries(id) on delete cascade not null,
+  set_number integer not null default 1,
+  weight numeric,
+  reps_min numeric,
+  reps_max numeric,
+  distance numeric,
+  duration_seconds integer,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.workout_rest_preferences (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) not null,
+  exercise_id uuid references public.workout_exercises_def(id) on delete cascade not null,
+  rest_seconds integer not null default 60 check (rest_seconds >= 0),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique (user_id, exercise_id)
+);
+
 -- RLS Policies
 alter table public.workout_exercises_def enable row level security;
 alter table public.workouts enable row level security;
 alter table public.workout_log_entries enable row level security;
 alter table public.workout_sets enable row level security;
+alter table public.workout_rest_preferences enable row level security;
+alter table public.workout_routines enable row level security;
+alter table public.workout_routine_entries enable row level security;
+alter table public.workout_routine_sets enable row level security;
 
 -- Exercises: Public readout + User private
 create policy "Allow public exercises read access" on public.workout_exercises_def for select using (user_id is null or auth.uid() = user_id);
@@ -237,4 +284,17 @@ create policy "Allow users to manage own sets" on public.workout_sets for all us
         select 1 from public.workout_log_entries wle
         where wle.id = workout_log_entry_id and wle.user_id = auth.uid()
     )
+);
+
+create policy "Allow users to manage own workout rest preferences" on public.workout_rest_preferences for all using (auth.uid() = user_id);
+
+create policy "Allow users to manage own workout routines" on public.workout_routines for all using (auth.uid() = user_id);
+
+create policy "Allow users to manage own workout routine entries" on public.workout_routine_entries for all using (auth.uid() = user_id);
+
+create policy "Allow users to manage own workout routine sets" on public.workout_routine_sets for all using (
+  exists (
+    select 1 from public.workout_routine_entries wre
+    where wre.id = routine_entry_id and wre.user_id = auth.uid()
+  )
 );

@@ -9,6 +9,12 @@ export class SyncManager {
   private syncInterval: ReturnType<typeof setInterval> | null = null;
   private isSyncing = false;
 
+    private isInvalidUuidLiteral(value: unknown): boolean {
+        if (typeof value !== 'string') return false;
+        const normalized = value.trim().toLowerCase();
+        return normalized === '' || normalized === 'null' || normalized === 'undefined';
+    }
+
     private async reconcileDeletedFoods() {
         const PAGE_SIZE = 500;
         const remoteFoodIds = new Set<string>();
@@ -85,7 +91,8 @@ export class SyncManager {
      const tables = [
          'profiles', 'foods', 'food_ingredients', 'logs', 'goals', 'metrics', 
          'activities', 'activity_logs',
-         'workout_exercises_def', 'workouts', 'workout_log_entries', 'workout_sets'
+         'workout_exercises_def', 'workout_rest_preferences', 'workout_routines', 'workout_routine_entries', 'workout_routine_sets',
+         'workouts', 'workout_log_entries', 'workout_sets'
      ] as const;
      
      for (const table of tables) {
@@ -182,9 +189,13 @@ export class SyncManager {
             activities: 5,
             activity_logs: 6,
             workout_exercises_def: 7,
-            workouts: 8,
-            workout_log_entries: 9,
-            workout_sets: 10
+            workout_rest_preferences: 8,
+            workout_routines: 9,
+            workout_routine_entries: 10,
+            workout_routine_sets: 11,
+            workouts: 12,
+            workout_log_entries: 13,
+            workout_sets: 14
         };
 
         const sortedQueue = [...queue].sort((a, b) => {
@@ -291,6 +302,20 @@ export class SyncManager {
             'activities',
             'activity_logs',
             'workout_exercises_def',
+            'workout_rest_preferences',
+            'workout_routines',
+            'workout_routine_entries',
+            'workouts',
+            'workout_log_entries'
+        ]);
+        const strictUserOwnedTables = new Set([
+            'logs',
+            'goals',
+            'metrics',
+            'activity_logs',
+            'workout_rest_preferences',
+            'workout_routines',
+            'workout_routine_entries',
             'workouts',
             'workout_log_entries'
         ]);
@@ -319,13 +344,31 @@ export class SyncManager {
     // For create/update, we need to clean the data (remove local-only fields if any)
     const { synced, ...payload } = data;
 
+        if (
+            table === 'workout_log_entries' &&
+            action === 'create' &&
+            this.isInvalidUuidLiteral(payload.workout_id)
+        ) {
+            console.warn('[SyncManager] Dropping malformed workout_log_entries create with invalid workout_id', payload);
+            if (payload.id) {
+                try {
+                    await db.workout_log_entries.delete(payload.id);
+                } catch (cleanupError) {
+                    console.warn('[SyncManager] Failed to delete malformed local workout_log_entries row', cleanupError);
+                }
+            }
+            return;
+        }
+
         if (!supportsUserId && 'user_id' in payload) {
             delete payload.user_id;
         }
     
     // override user_id with actual authenticated user id
     if (session?.user?.id && supportsUserId) {
-         if (payload.user_id === 'local-user' || payload.user_id === 'current-user' || !payload.user_id) {
+         if (strictUserOwnedTables.has(table)) {
+             payload.user_id = session.user.id;
+         } else if (payload.user_id === 'local-user' || payload.user_id === 'current-user' || !payload.user_id) {
              payload.user_id = session.user.id;
          }
          // Also ensure ownership for ownable items
@@ -468,6 +511,10 @@ export class SyncManager {
         { dexie: 'activities', supabase: 'activities', dateField: 'updated_at', public: true },
         { dexie: 'activity_logs', supabase: 'activity_logs', dateField: 'created_at' },
         { dexie: 'workout_exercises_def', supabase: 'workout_exercises_def', dateField: 'updated_at', public: true },
+        { dexie: 'workout_rest_preferences', supabase: 'workout_rest_preferences', dateField: 'updated_at' },
+        { dexie: 'workout_routines', supabase: 'workout_routines', dateField: 'updated_at' },
+        { dexie: 'workout_routine_entries', supabase: 'workout_routine_entries', dateField: 'created_at' },
+        { dexie: 'workout_routine_sets', supabase: 'workout_routine_sets', dateField: 'created_at' },
         { dexie: 'workouts', supabase: 'workouts', dateField: 'updated_at' },
         { dexie: 'workout_log_entries', supabase: 'workout_log_entries', dateField: 'created_at' },
         { dexie: 'workout_sets', supabase: 'workout_sets', dateField: 'created_at' }

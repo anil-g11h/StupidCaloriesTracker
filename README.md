@@ -69,6 +69,14 @@ npm run dev
 
 Open your browser and navigate to `http://localhost:5173` (or the port shown in your terminal).
 
+## Seed Common Exercises
+
+To populate the global exercise library with common exercises, open Supabase SQL Editor and run:
+
+- `supabase/seed_workout_exercises.sql`
+
+The script is idempotent and only inserts missing names where `user_id is null`.
+
 ## Offline Features
 
 The application is built with an "Offline-First" architecture. Here's how it works:

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CaretLeftIcon, FloppyDiskIcon as SaveIcon } from '@phosphor-icons/react';
 import { db } from '../../../../lib/db';
 import { generateId } from '../../../../lib';
@@ -12,6 +12,10 @@ const EQUIPMENT_TYPES = ['Barbell', 'Dumbbell', 'Machine', 'Cable', 'Bodyweight'
 
 export default function NewExercise() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const workoutId = searchParams.get('workoutId');
+    const routineId = searchParams.get('routineId');
+    const replaceEntryId = searchParams.get('replaceEntryId');
 
     // --- State Management ---
     const [newName, setNewName] = useState('');
@@ -38,7 +42,13 @@ export default function NewExercise() {
             });
 
             // Navigate back to the selection list
-            navigate('/workouts/exercises');
+            navigate(
+                routineId
+                    ? `/workouts/exercises?routineId=${encodeURIComponent(routineId)}`
+                    : workoutId
+                    ? `/workouts/exercises?workoutId=${encodeURIComponent(workoutId)}${replaceEntryId ? `&replaceEntryId=${encodeURIComponent(replaceEntryId)}` : ''}`
+                    : '/workouts/exercises'
+            );
         } catch (error) {
             console.error("Failed to create exercise:", error);
         }

@@ -943,8 +943,8 @@ export default function DailyLogPage() {
                       key={log.id}
                       className="bg-card p-4 rounded-xl shadow-sm border border-border-subtle flex justify-between items-center"
                     >
-                      <div>
-                        <div className="font-medium text-text-main">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <div className="font-medium text-text-main truncate">
                           {log.food?.name || 'Unknown Food'}
                           <span className="text-xs text-text-muted font-normal ml-1">
                             ({log.food?.serving_unit && WEIGHT_BASED_REGEX.test(log.food.serving_unit)
@@ -954,7 +954,7 @@ export default function DailyLogPage() {
                         </div>
                         <div className="text-xs text-text-muted mt-1 flex items-center gap-2">
                           <span className="whitespace-nowrap">{log.calories} kcal</span>
-                          <div className="flex-1 h-2 rounded-full overflow-hidden bg-surface border border-border-subtle flex">
+                          <div className="w-28 shrink-0 h-2 rounded-full overflow-hidden bg-surface border border-border-subtle flex">
                             <div className="bg-macro-protein" style={{ width: `${proteinPct}%` }} title={`${log.protein}p`} />
                             <div className="bg-macro-carbs" style={{ width: `${carbsPct}%` }} title={`${log.carbs}c`} />
                             <div className="bg-macro-fat" style={{ width: `${fatPct}%` }} title={`${log.fat}f`} />

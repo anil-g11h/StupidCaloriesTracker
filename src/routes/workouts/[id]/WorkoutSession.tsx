@@ -11,7 +11,8 @@ import {
   DotsThreeVerticalIcon as MoreVertical,
   GearSixIcon as Settings,
   TimerIcon as Timer,
-  CaretDownIcon as ChevronDown
+  CaretDownIcon as ChevronDown,
+  BarbellIcon as Dumbbell
 } from "@phosphor-icons/react";
 import { db, type Workout, type WorkoutExerciseDef, type WorkoutLogEntry, type WorkoutSet } from '../../../lib/db';
 import { generateId } from '../../../lib';
@@ -20,6 +21,7 @@ import {
 } from '../../../lib/workouts';
 import { useStackNavigation } from '../../../lib/useStackNavigation';
 import { useWorkoutSession } from './useWorkoutSession';
+import { DurationScrollerInput, getMetricColumns } from '../components/WorkoutSetComponents';
 
 
 
@@ -136,11 +138,11 @@ const SetRow = ({ set, onToggle }: { set: WorkoutSet; onToggle: () => void }) =>
     </div>
     <button
       onClick={onToggle}
-      className={`col-span-2 h-10 rounded-lg flex items-center justify-center transition-colors ${
-        set.completed ? 'bg-green-500 text-white' : 'bg-surface'
+      className={`col-span-2 h-8 w-8 mx-auto rounded-md flex items-center justify-center transition-colors ${
+        set.completed ? 'bg-green-500 text-white' : 'bg-surface border border-border-subtle text-text-muted'
       }`}
     >
-      <Check size={18} />
+      <Check size={12} />
     </button>
   </div>
 );
@@ -186,11 +188,67 @@ const RestTimerOverlay = ({ timer, onAdjust, onSkip, barRef }: RestTimerProps) =
   );
 };
 
+const CompletedWorkoutView = ({
+  workout,
+  elapsedTime,
+  exercises,
+  definitions,
+  sets,
+}: {
+  workout?: Workout;
+  elapsedTime: string;
+  exercises?: WorkoutLogEntry[];
+  definitions?: Record<string, WorkoutExerciseDef>;
+  sets?: Record<string, WorkoutSet[]>;
+}) => (
+  <div className="space-y-4">
+    {workout?.notes?.trim() ? (
+      <div className="rounded-xl border border-border-subtle bg-card p-4">
+        <p className="text-xs font-semibold uppercase text-text-muted mb-2">How it went</p>
+        <p className="text-sm text-text-main whitespace-pre-wrap">{workout.notes}</p>
+      </div>
+    ) : null}
+
+    <div className="space-y-3">
+      {exercises?.map((exercise) => {
+        const definition = definitions?.[exercise.exercise_id];
+        const completedSets = (sets?.[exercise.id] || []).filter((set) => set.completed);
+        if (completedSets.length === 0) return null;
+
+        return (
+          <div key={exercise.id} className="rounded-xl border border-border-subtle bg-card p-4">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h3 className="font-bold text-text-main">{definition?.name || 'Exercise'}</h3>
+                <p className="text-xs text-text-muted mt-1">{definition?.muscle_group || 'General'}</p>
+              </div>
+              <span className="text-xs font-semibold text-text-muted bg-surface px-2 py-1 rounded-md">
+                {completedSets.length} set{completedSets.length > 1 ? 's' : ''}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {completedSets.map((set) => (
+                <div key={set.id} className="grid grid-cols-3 gap-2 rounded-lg bg-surface p-3 text-sm">
+                  <span className="font-semibold text-text-muted">Set {set.set_number}</span>
+                  <span className="text-text-main font-medium">{set.weight ?? 0} kg</span>
+                  <span className="text-text-main font-medium text-right">{set.reps ?? 0} reps</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
 
 
 const WorkoutSessionComponent = () => {
   const { id } = useParams();
   const workoutId: string | null = id === 'new' ? null : (id || null);
+  const [isEditingCompleted, setIsEditingCompleted] = useState(false);
 
   // Destructuring everything from our custom hook
   const {
@@ -208,112 +266,572 @@ const WorkoutSessionComponent = () => {
     adjustRestTimer,
     skipRestTimer,
     navigateToAddExercises,
-    finishWorkout, handleToggleSet, barRef
-  } = useWorkoutSession(workoutId);
+    handleRemoveExercise,
+    handleReorderExercise,
+    navigateToReplaceExercise,
+    requestFinishWorkout,
+    saveFinishedWorkout,
+    copyWorkout,
+    handleToggleSet,
+    restPreferences,
+    setExerciseRestPreference,
+    barRef
+  } = useWorkoutSession(workoutId, isEditingCompleted);
+
+  const [showFinishScreen, setShowFinishScreen] = useState(false);
+  const [finishTitle, setFinishTitle] = useState('Workout');
+  const [finishDurationMinutes, setFinishDurationMinutes] = useState(1);
+  const [finishDescription, setFinishDescription] = useState('');
+  const [isSavingFinish, setIsSavingFinish] = useState(false);
+  const [showWorkoutActions, setShowWorkoutActions] = useState(false);
+  const [isCopyingWorkout, setIsCopyingWorkout] = useState(false);
+  const [editingRestExerciseId, setEditingRestExerciseId] = useState<string | null>(null);
+
+  const previousSetsByExercise = useLiveQuery(async () => {
+    if (!exercises?.length || !workout?.start_time) return {};
+    const exerciseIds = Array.from(new Set(exercises.map((exercise) => exercise.exercise_id)));
+    return getPreviousWorkoutSets(exerciseIds, workout.start_time);
+  }, [exercises, workout?.start_time]);
+
+  const restTimerOptions = useMemo(() => {
+    const base = [0, 5, 10, 15];
+    for (let value = 20; value <= 120; value += 5) base.push(value);
+    for (let value = 135; value <= 300; value += 15) base.push(value);
+    return base;
+  }, []);
+
+  const formatRestTimer = (seconds: number) => {
+    if (seconds <= 0) return 'OFF';
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds % 60 === 0) return `${seconds / 60}min`;
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  };
+
+  const formatPreviousSetValue = (set?: WorkoutSet) => {
+    if (!set) return '-';
+    const previousWeight = Number(set.weight ?? 0);
+    const previousReps = Number(set.reps ?? 0);
+    return `${previousWeight}kg x ${previousReps}`;
+  };
+
+  const formatDurationValue = (seconds: number) => {
+    const safeSeconds = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
+    if (mins <= 0) return `${secs}s`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatPreviousSetValueByMetric = (
+    set: WorkoutSet | undefined,
+    firstField: 'weight' | 'reps' | 'distance' | 'duration_seconds' | null,
+    firstUnit: string,
+    secondField: 'weight' | 'reps' | 'distance' | 'duration_seconds' | null,
+    secondUnit: string
+  ) => {
+    if (!set) return '-';
+
+    const renderValue = (
+      field: 'weight' | 'reps' | 'distance' | 'duration_seconds' | null,
+      unit: string
+    ) => {
+      if (!field) return null;
+      const raw = Number((set as any)[field] ?? 0);
+      if (field === 'duration_seconds') return formatDurationValue(raw);
+      if (unit === 'kg') return `${raw}kg`;
+      if (unit === 'km') return `${raw}km`;
+      return `${raw}`;
+    };
+
+    const firstValue = renderValue(firstField, firstUnit);
+    const secondValue = renderValue(secondField, secondUnit);
+
+    if (firstValue && secondValue) return `${firstValue} x ${secondValue}`;
+    return firstValue || secondValue || '-';
+  };
+
+  const getSetFieldPlaceholder = (set: WorkoutSet, field: 'weight' | 'reps' | 'distance' | 'duration_seconds' | null) => {
+    if (field !== 'reps') return undefined;
+    if (set.reps_min == null && set.reps_max == null) return undefined;
+
+    const min = set.reps_min ?? set.reps_max;
+    const max = set.reps_max ?? set.reps_min;
+    if (min == null || max == null) return undefined;
+    return `${min}-${max}`;
+  };
+
+  const transitionFinishScreen = (direction: 'forward' | 'backward', update: () => void) => {
+    if (!document.startViewTransition) {
+      update();
+      return;
+    }
+
+    document.documentElement.classList.add(`transition-${direction}`);
+    const transition = document.startViewTransition(() => {
+      update();
+    });
+
+    transition.finished.finally(() => {
+      document.documentElement.classList.remove(`transition-${direction}`);
+    });
+  };
+
+  const getCurrentDurationMinutes = () => {
+    if (!workout?.start_time) return 0;
+    const startMs = new Date(workout.start_time).getTime();
+    const endMs = workout.end_time ? new Date(workout.end_time).getTime() : Date.now();
+    return Math.max(0, Math.round((endMs - startMs) / 60000));
+  };
+
+  const durationOptions = Array.from({ length: 300 }, (_, i) => i);
+
+  const handleOpenFinishScreen = async () => {
+    const canFinish = await requestFinishWorkout();
+    if (!canFinish) return;
+
+    setFinishTitle('');
+    setFinishDurationMinutes(getCurrentDurationMinutes());
+    setFinishDescription(workout?.notes || '');
+    transitionFinishScreen('forward', () => setShowFinishScreen(true));
+  };
+
+  const handleSaveFinishedWorkout = async () => {
+    setIsSavingFinish(true);
+    try {
+      await saveFinishedWorkout({
+        title: finishTitle,
+        durationMinutes: finishDurationMinutes,
+        description: finishDescription,
+        stayOnPage: isEditingCompleted,
+      });
+
+      if (isEditingCompleted) {
+        setIsEditingCompleted(false);
+        setShowFinishScreen(false);
+      }
+    } finally {
+      setIsSavingFinish(false);
+    }
+  };
+
+  const handleEditWorkout = () => {
+    setShowWorkoutActions(false);
+    setIsEditingCompleted(true);
+  };
+
+  const handleCopyWorkout = async () => {
+    setIsCopyingWorkout(true);
+    try {
+      await copyWorkout();
+    } finally {
+      setIsCopyingWorkout(false);
+      setShowWorkoutActions(false);
+    }
+  };
+
+  const isFinished = Boolean(workout?.end_time);
+  const showCompletedReadonly = isFinished && !isEditingCompleted;
+  const canEditWorkout = !showCompletedReadonly;
 
   return (
     <div className="pb-32 pt-4 px-4 max-w-md mx-auto min-h-screen bg-background">
       {/* Sticky Header */}
       <header className="mb-6 sticky top-0 bg-background z-20 py-2 border-b border-border-subtle -mx-4 px-4">
         <div className="flex justify-between items-center mb-2">
-          <h1 className="text-xl font-bold truncate">{workout?.name || 'Workout'}</h1>
-          <button
-            onClick={finishWorkout}
-            className="bg-brand text-white px-5 py-2 rounded-xl text-sm font-bold shadow-md"
-          >
-            Finish
-          </button>
+          <div className="flex items-center gap-2 min-w-0">
+            {showFinishScreen && (
+              <button
+                onClick={() => transitionFinishScreen('backward', () => {
+                  setShowFinishScreen(false);
+                  if (isEditingCompleted) setIsEditingCompleted(false);
+                })}
+                className="h-9 w-9 rounded-lg border border-border-subtle bg-surface text-text-main flex items-center justify-center"
+                aria-label="Back"
+              >
+                <ChevronDown size={18} className="rotate-90" />
+              </button>
+            )}
+            <h1 className="text-xl font-bold truncate">{showFinishScreen ? 'Finish Workout' : workout?.name || 'Workout'}</h1>
+          </div>
+          {showFinishScreen ? (
+            <button
+              onClick={handleSaveFinishedWorkout}
+              disabled={isSavingFinish}
+              className="bg-brand text-white px-5 py-2 rounded-xl text-sm font-bold shadow-md disabled:opacity-60"
+            >
+              {isSavingFinish ? 'Saving...' : 'Save'}
+            </button>
+          ) : isFinished ? (
+            showCompletedReadonly ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowWorkoutActions((prev) => !prev)}
+                  className="h-10 w-10 rounded-xl border border-border-subtle bg-surface text-text-main flex items-center justify-center"
+                  aria-label="Workout actions"
+                >
+                  <MoreVertical size={18} />
+                </button>
+
+                {showWorkoutActions && (
+                  <div className="absolute right-0 mt-2 w-44 rounded-xl border border-border-subtle bg-card shadow-lg z-30 overflow-hidden">
+                    <button
+                      onClick={handleEditWorkout}
+                      className="w-full px-3 py-2.5 text-left text-sm font-medium text-text-main hover:bg-surface"
+                    >
+                      Edit Workout
+                    </button>
+                    <button
+                      onClick={handleCopyWorkout}
+                      disabled={isCopyingWorkout}
+                      className="w-full px-3 py-2.5 text-left text-sm font-medium text-text-main hover:bg-surface disabled:opacity-60"
+                    >
+                      {isCopyingWorkout ? 'Copying...' : 'Copy Workout'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={handleOpenFinishScreen}
+                className="bg-brand text-white px-5 py-2 rounded-xl text-sm font-bold shadow-md"
+              >
+                Finish
+              </button>
+            )
+          ) : (
+            <button
+              onClick={handleOpenFinishScreen}
+              className="bg-brand text-white px-5 py-2 rounded-xl text-sm font-bold shadow-md"
+            >
+              Finish
+            </button>
+          )}
         </div>
 
-        <div className="flex justify-between text-xs font-semibold text-text-muted uppercase">
-          <StatItem label="Duration" value={elapsedTime} />
-          <StatItem label="Volume" value={`${totalStats.volume} kg`} border />
-          <StatItem label="Sets" value={totalStats.sets} border />
-        </div>
+        {showCompletedReadonly && workout?.end_time && (
+          <p className="text-xs text-text-muted mb-2">
+            Completed {new Date(workout.end_time).toLocaleString()}
+          </p>
+        )}
+
+        {!showFinishScreen && (
+          <div className="flex justify-between text-xs font-semibold text-text-muted uppercase">
+            <StatItem label="Duration" value={elapsedTime} />
+            <StatItem label="Volume" value={`${totalStats.volume} kg`} border />
+            <StatItem label="Sets" value={totalStats.sets} border />
+          </div>
+        )}
       </header>
 
-      {/* Exercise List */}
-      <div className="space-y-6">
-        {exercises?.map((exercise) => {
-          const def = definitions?.[exercise.exercise_id];
-          const currentSets = sets?.[exercise.id] || [];
+      {canEditWorkout && showFinishScreen ? (
+        <section className="rounded-2xl border border-border-subtle bg-card p-4 space-y-4">
+          <div>
+            <input
+              value={finishTitle}
+              onChange={(e) => setFinishTitle(e.target.value)}
+              placeholder={workout?.name?.trim() || 'Workout'}
+              className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-2 text-sm text-text-main"
+            />
+          </div>
 
-          return (
-            <div key={exercise.id} className="bg-card rounded-2xl p-4 shadow-sm border border-border-subtle">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="font-bold text-lg text-brand-dark">{def?.name}</h3>
-                  <p className="text-xs text-text-muted">
-                    {def?.muscle_group} • {METRIC_TYPES[(def?.metric_type || 'weight_reps') as keyof typeof METRIC_TYPES]}
-                  </p>
+          <div className="rounded-xl border border-border-subtle bg-surface p-3">
+            <p className="text-xs font-semibold text-text-muted uppercase mb-3">Duration</p>
+            <select
+              value={finishDurationMinutes}
+              onChange={(e) => setFinishDurationMinutes(Number(e.target.value))}
+              className="w-full rounded-lg border border-border-subtle bg-card px-3 py-2 text-base font-bold text-text-main tabular-nums"
+            >
+              {durationOptions.map((totalMinutes) => {
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                const label = hours > 0
+                  ? `${hours}h ${minutes.toString().padStart(2, '0')}min`
+                  : `${minutes} min`;
+
+                return (
+                  <option key={totalMinutes} value={totalMinutes}>{label}</option>
+                );
+              })}
+            </select>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold uppercase text-text-muted">
+              <div className="rounded-lg border border-border-subtle bg-card px-3 py-2 text-center">
+                <span className="block text-text-primary text-sm font-bold font-mono">{totalStats.volume} kg</span>
+                Volume
+              </div>
+              <div className="rounded-lg border border-border-subtle bg-card px-3 py-2 text-center">
+                <span className="block text-text-primary text-sm font-bold font-mono">{totalStats.sets}</span>
+                Sets
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-text-muted uppercase mb-1">How did your workout go?</label>
+            <textarea
+              value={finishDescription}
+              onChange={(e) => setFinishDescription(e.target.value)}
+              rows={4}
+              placeholder="Add notes about energy, form, PRs, and anything you want to remember."
+              className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-2 text-sm text-text-main resize-none"
+            />
+          </div>
+
+          <div className="rounded-xl border border-dashed border-border-subtle bg-surface px-3 py-3">
+            <p className="text-sm font-semibold text-text-main">Photos & videos</p>
+            <p className="text-xs text-text-muted mt-1">Coming soon: add media from camera or gallery.</p>
+          </div>
+
+        </section>
+      ) : showCompletedReadonly ? (
+        <CompletedWorkoutView
+          workout={workout}
+          elapsedTime={elapsedTime}
+          exercises={exercises}
+          definitions={definitions}
+          sets={sets}
+        />
+      ) : (
+        <>
+          {/* Exercise List */}
+          <div className="space-y-6">
+            {exercises?.map((exercise, exerciseIndex) => {
+              const def = definitions?.[exercise.exercise_id];
+              const currentSets = sets?.[exercise.id] || [];
+              const previousSets = previousSetsByExercise?.[exercise.exercise_id]?.sets || [];
+              const metricColumns = getMetricColumns(def?.metric_type);
+              const restSeconds = restPreferences?.[exercise.exercise_id] ?? 0;
+              const isEditingRestTimer = editingRestExerciseId === exercise.id;
+              const isMenuOpen = expandedMenuId === exercise.id;
+              const isFirstExercise = exerciseIndex === 0;
+              const isLastExercise = exerciseIndex === (exercises.length - 1);
+              const isDurationOnlyMetric = metricColumns.first.field === 'duration_seconds' && metricColumns.second.field === null;
+
+              return (
+                <div key={exercise.id} className="bg-card rounded-2xl p-4 shadow-sm border border-border-subtle">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-bold text-lg text-brand-dark">{def?.name}</h3>
+                      <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                        {isEditingRestTimer ? (
+                          <div className="inline-flex items-center gap-1.5 rounded-full border border-brand/20 bg-brand/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-brand">
+                            <Timer size={12} />
+                            <select
+                              autoFocus
+                              value={restSeconds}
+                              onBlur={() => setEditingRestExerciseId(null)}
+                              onChange={(e) => {
+                                const nextValue = Number(e.target.value);
+                                void setExerciseRestPreference(exercise.exercise_id, nextValue);
+                                setEditingRestExerciseId(null);
+                              }}
+                              className="bg-transparent text-[11px] font-semibold tracking-wide text-brand outline-none"
+                            >
+                              {restTimerOptions.map((option) => (
+                                <option key={option} value={option}>
+                                  {option === 0 ? 'Rest: OFF' : `Rest: ${formatRestTimer(option)}`}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingRestExerciseId(exercise.id)}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-brand/20 bg-brand/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-brand"
+                          >
+                            <Timer size={12} />
+                            <span className="text-brand">Rest: {formatRestTimer(restSeconds)}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {canEditWorkout && (
+                      <div className="relative">
+                        <button onClick={() => setExpandedMenuId(prev => prev === exercise.id ? null : exercise.id)}>
+                          <MoreVertical size={20} className="text-text-muted" />
+                        </button>
+
+                        {isMenuOpen && (
+                          <div className="absolute right-0 mt-2 w-44 rounded-xl border border-border-subtle bg-card shadow-lg z-30 overflow-hidden">
+                            <button
+                              onClick={() => navigateToReplaceExercise(exercise.id)}
+                              className="w-full px-3 py-2.5 text-left text-sm font-medium text-text-main hover:bg-surface"
+                            >
+                              Replace Exercise
+                            </button>
+                            <button
+                              onClick={() => handleReorderExercise(exercise.id, 'up')}
+                              disabled={isFirstExercise}
+                              className="w-full px-3 py-2.5 text-left text-sm font-medium text-text-main hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Move Up
+                            </button>
+                            <button
+                              onClick={() => handleReorderExercise(exercise.id, 'down')}
+                              disabled={isLastExercise}
+                              className="w-full px-3 py-2.5 text-left text-sm font-medium text-text-main hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Move Down
+                            </button>
+                            <button
+                              onClick={() => handleRemoveExercise(exercise.id)}
+                              className="w-full px-3 py-2.5 text-left text-sm font-medium text-red-500 hover:bg-surface"
+                            >
+                              Remove Exercise
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Set Table */}
+                  <div className="mb-2 grid grid-cols-12 gap-2 items-center text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                    <span className="col-span-1 text-center">Set</span>
+                    <span className="col-span-4">Previous</span>
+                    {isDurationOnlyMetric ? (
+                      <span className="col-span-5 text-center">{metricColumns.first.label}</span>
+                    ) : (
+                      <>
+                        <span className="col-span-2 text-center flex items-center justify-center gap-1">
+                          {metricColumns.first.field === 'weight' ? <Dumbbell size={12} /> : null}
+                          {metricColumns.first.label}
+                        </span>
+                        <span className="col-span-3 text-center">{metricColumns.second.label}</span>
+                      </>
+                    )}
+                    <span className="col-span-2 text-center flex items-center justify-center"><Check size={12} /></span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {currentSets.map((set: WorkoutSet, setIndex: number) => (
+                      <div
+                        key={set.id}
+                        className={`grid grid-cols-12 gap-2 items-center rounded-lg px-1 py-1 transition-colors ${
+                          set.completed ? 'bg-green-500/10' : 'bg-transparent'
+                        }`}
+                      >
+                        <span className="col-span-1 text-center text-text-muted font-bold">{set.set_number}</span>
+                        <div className="col-span-4 rounded px-2 py-2 text-[11px] font-semibold text-text-muted truncate">
+                          {formatPreviousSetValueByMetric(
+                            previousSets[setIndex],
+                            metricColumns.first.field,
+                            metricColumns.first.unit,
+                            metricColumns.second.field,
+                            metricColumns.second.unit
+                          )}
+                        </div>
+                        {isDurationOnlyMetric ? (
+                          <div className="col-span-5">
+                            <DurationScrollerInput
+                              valueSeconds={Number((set as any).duration_seconds ?? 0)}
+                              onChange={(nextSeconds) => db.workout_sets.update(set.id, { duration_seconds: nextSeconds })}
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="col-span-2">
+                              {metricColumns.first.field ? (
+                                metricColumns.first.field === 'duration_seconds' ? (
+                                  <DurationScrollerInput
+                                    valueSeconds={Number((set as any)[metricColumns.first.field] ?? 0)}
+                                    onChange={(nextSeconds) => db.workout_sets.update(set.id, { [metricColumns.first.field]: nextSeconds })}
+                                  />
+                                ) : (
+                                  <input
+                                    type="number"
+                                    defaultValue={
+                                      metricColumns.first.field === 'reps'
+                                        ? ((set as any)[metricColumns.first.field] ?? '')
+                                        : Number((set as any)[metricColumns.first.field] ?? 0)
+                                    }
+                                    placeholder={getSetFieldPlaceholder(set, metricColumns.first.field)}
+                                    className="w-full bg-transparent p-2 rounded text-center font-bold"
+                                    onChange={(e) => db.workout_sets.update(set.id, { [metricColumns.first.field]: Number(e.target.value) })}
+                                  />
+                                )
+                              ) : (
+                                <div className="h-10 flex items-center justify-center text-text-muted">-</div>
+                              )}
+                            </div>
+                            <div className="col-span-3">
+                              {metricColumns.second.field ? (
+                                metricColumns.second.field === 'duration_seconds' ? (
+                                  <DurationScrollerInput
+                                    valueSeconds={Number((set as any)[metricColumns.second.field] ?? 0)}
+                                    onChange={(nextSeconds) => db.workout_sets.update(set.id, { [metricColumns.second.field]: nextSeconds })}
+                                  />
+                                ) : (
+                                  <input
+                                    type="number"
+                                    defaultValue={
+                                      metricColumns.second.field === 'reps'
+                                        ? ((set as any)[metricColumns.second.field] ?? '')
+                                        : Number((set as any)[metricColumns.second.field] ?? 0)
+                                    }
+                                    placeholder={getSetFieldPlaceholder(set, metricColumns.second.field)}
+                                    className="w-full bg-transparent p-2 rounded text-center font-bold"
+                                    onChange={(e) => db.workout_sets.update(set.id, { [metricColumns.second.field]: Number(e.target.value) })}
+                                  />
+                                )
+                              ) : (
+                                <div className="h-10 flex items-center justify-center text-text-muted">-</div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                        <button
+                          onClick={() => handleToggleSet(set.id, set.completed ?? false, exercise.id, exercise.exercise_id)}
+                          className={`col-span-2 h-8 w-8 mx-auto rounded-md flex items-center justify-center transition-colors ${
+                            set.completed ? 'bg-green-500 text-white' : 'bg-surface border border-border-subtle text-text-muted'
+                          }`}
+                        >
+                          <Check size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {canEditWorkout && (
+                    <button
+                      onClick={() => handleAddSet(exercise.id)}
+                      className="w-full mt-4 py-2 bg-brand/5 text-brand font-bold rounded-xl flex items-center justify-center gap-2"
+                    >
+                      <Plus size={16} /> Add Set
+                    </button>
+                  )}
                 </div>
-                <button onClick={() => setExpandedMenuId(prev => prev === exercise.id ? null : exercise.id)}>
-                  <MoreVertical size={20} className="text-text-muted" />
+              );
+            })}
+          </div>
+
+          {/* Add Exercise Button with View Transition */}
+          {canEditWorkout && (
+            <>
+              <div className="pt-6">
+                <button
+                  onClick={navigateToAddExercises}
+                  className="group flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border-subtle p-6 text-center transition-colors hover:border-brand hover:bg-brand/5 cursor-pointer"
+                >
+                  <div className="rounded-full bg-surface-secondary p-3 transition-colors group-hover:bg-brand group-hover:text-white mb-2 text-text-muted">
+                    <Plus size={24} />
+                  </div>
+                  <span className="font-bold text-text-primary">Add Exercise</span>
+                  <span className="text-xs text-text-muted">Search or create new</span>
                 </button>
               </div>
 
-              {/* Set Table */}
-              <div className="space-y-2">
-                {currentSets.map((set: WorkoutSet) => (
-                  <div key={set.id} className="grid grid-cols-12 gap-2 items-center">
-                    <span className="col-span-1 text-center text-text-muted font-bold">{set.set_number}</span>
-                    <div className="col-span-9 grid grid-cols-2 gap-2">
-                      <input
-                        type="number"
-                        defaultValue={set.weight}
-                        className="bg-surface p-2 rounded text-center font-bold"
-                        onChange={(e) => db.workout_sets.update(set.id, { weight: Number(e.target.value) })}
-                      />
-                      <input
-                        type="number"
-                        defaultValue={set.reps}
-                        className="bg-surface p-2 rounded text-center font-bold"
-                        onChange={(e) => db.workout_sets.update(set.id, { reps: Number(e.target.value) })}
-                      />
-                    </div>
-                    <button
-                      onClick={() => handleToggleSet(set.id, set.completed ?? false, exercise.id, exercise.exercise_id)}
-                      className={`col-span-2 h-10 rounded-lg flex items-center justify-center transition-colors ${
-                        set.completed ? 'bg-green-500 text-white' : 'bg-surface'
-                      }`}
-                    >
-                      <Check size={18} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
               <button
-                onClick={() => handleAddSet(exercise.id)}
-                className="w-full mt-4 py-2 bg-brand/5 text-brand font-bold rounded-xl flex items-center justify-center gap-2"
+                onClick={cancelWorkout}
+                className="w-full py-4 text-red-500 text-sm font-medium mt-8 hover:bg-surface-secondary rounded-xl transition-colors"
               >
-                <Plus size={16} /> Add Set
+                Discard Workout
               </button>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Add Exercise Button with View Transition */}
-      <div className="pt-6">
-        <button
-          onClick={navigateToAddExercises}
-          className="group flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border-subtle p-6 text-center transition-colors hover:border-brand hover:bg-brand/5 cursor-pointer"
-        >
-          <div className="rounded-full bg-surface-secondary p-3 transition-colors group-hover:bg-brand group-hover:text-white mb-2 text-text-muted">
-            <Plus size={24} />
-          </div>
-          <span className="font-bold text-text-primary">Add Exercise</span>
-          <span className="text-xs text-text-muted">Search or create new</span>
-        </button>
-      </div>
-
-      <button
-        onClick={cancelWorkout}
-        className="w-full py-4 text-red-500 text-sm font-medium mt-8 hover:bg-surface-secondary rounded-xl transition-colors"
-      >
-        Discard Workout
-      </button>
+            </>
+          )}
+        </>
+      )}
 
       {/* Rest Timer Overlay */}
       {activeRestTimer && (

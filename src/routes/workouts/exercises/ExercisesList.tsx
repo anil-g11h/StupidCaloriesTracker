@@ -19,7 +19,19 @@ const EQUIPMENT_TYPES = ['Barbell', 'Dumbbell', 'Machine', 'Cable', 'Bodyweight'
 export default function ExerciseSelector() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const workoutId = searchParams.get('workoutId');
+    const workoutIdParam = searchParams.get('workoutId');
+    const routineIdParam = searchParams.get('routineId');
+    const replaceEntryIdParam = searchParams.get('replaceEntryId');
+    const workoutId = workoutIdParam && workoutIdParam !== 'null' && workoutIdParam !== 'undefined'
+        ? workoutIdParam
+        : null;
+    const routineId = routineIdParam && routineIdParam !== 'null' && routineIdParam !== 'undefined'
+        ? routineIdParam
+        : null;
+    const replaceEntryId = replaceEntryIdParam && replaceEntryIdParam !== 'null' && replaceEntryIdParam !== 'undefined'
+        ? replaceEntryIdParam
+        : null;
+    const isReplaceMode = Boolean(replaceEntryId && workoutId);
     const { push, pop } = useStackNavigation();
     
     // --- UI State ---
@@ -51,6 +63,11 @@ export default function ExerciseSelector() {
 
     // --- Handlers ---
     const toggleSelect = (id: string) => {
+        if (isReplaceMode) {
+            setSelected({ [id]: true });
+            return;
+        }
+
         setSelected(prev => ({
             ...prev,
             [id]: !prev[id]
@@ -60,9 +77,64 @@ export default function ExerciseSelector() {
     const selectedCount = Object.values(selected).filter(Boolean).length;
 
     async function addSelectedExercises() {
-        if (!workoutId) return;
+        if (!workoutId && !routineId) {
+            console.warn('[ExercisesList] Missing valid workoutId; skipping addSelectedExercises.');
+            return;
+        }
         const ids = Object.keys(selected).filter((id) => selected[id]);
         if (ids.length === 0) return;
+
+        if (isReplaceMode && replaceEntryId) {
+            const replacementExerciseId = ids[0];
+
+            await db.transaction('rw', [db.workout_log_entries, db.workout_sets], async () => {
+                const entry = await db.workout_log_entries.get(replaceEntryId);
+                if (!entry || entry.workout_id !== workoutId) return;
+
+                await db.workout_log_entries.update(replaceEntryId, {
+                    exercise_id: replacementExerciseId,
+                    synced: 0,
+                });
+
+                await db.workout_sets.where('workout_log_entry_id').equals(replaceEntryId).delete();
+            });
+
+            pop();
+            return;
+        }
+
+        if (routineId) {
+            const existing = await db.workout_routine_entries.where('routine_id').equals(routineId).toArray();
+            let sortOrder = (existing.map(e => e.sort_order).sort((a, b) => b - a)[0] || 0) + 1;
+
+            await db.transaction('rw', [db.workout_routine_entries, db.workout_routine_sets], async () => {
+                for (const id of ids) {
+                    const routineEntryId = generateId();
+                    await db.workout_routine_entries.add({
+                        id: routineEntryId,
+                        routine_id: routineId,
+                        exercise_id: id,
+                        sort_order: sortOrder++,
+                        created_at: new Date(),
+                        synced: 0
+                    });
+
+                    await db.workout_routine_sets.add({
+                        id: generateId(),
+                        routine_entry_id: routineEntryId,
+                        set_number: 1,
+                        weight: 0,
+                        reps_min: 8,
+                        reps_max: 10,
+                        created_at: new Date(),
+                        synced: 0,
+                    });
+                }
+            });
+
+            pop();
+            return;
+        }
 
         const existing = await db.workout_log_entries.where('workout_id').equals(workoutId).toArray();
         let sortOrder = (existing.map(e => e.sort_order).sort((a, b) => b - a)[0] || 0) + 1;
@@ -90,14 +162,26 @@ export default function ExerciseSelector() {
             <header className="flex items-center justify-between mb-6">
                 <button
                     className="text-brand font-bold text-sm flex items-center gap-1 hover:opacity-70 transition-opacity"
-                    onClick={() => navigate(`/workouts/${workoutId}`)}
+                    onClick={() => {
+                        if (routineId) {
+                            navigate(`/workouts/routines/${routineId}`);
+                            return;
+                        }
+                        navigate(workoutId ? `/workouts/${workoutId}` : '/workouts');
+                    }}
                 >
                     <CaretLeftIcon weight="bold" />
                     Cancel
                 </button>
-                <h1 className="text-text-main font-bold text-lg">Add Exercises</h1>
+                <h1 className="text-text-main font-bold text-lg">{isReplaceMode ? 'Replace Exercise' : 'Add Exercises'}</h1>
                 <button
-                    onClick={() => push('/workouts/exercises/new')}
+                    onClick={() => push(
+                        routineId
+                            ? `/workouts/exercises/new?routineId=${encodeURIComponent(routineId)}`
+                            : workoutId
+                            ? `/workouts/exercises/new?workoutId=${encodeURIComponent(workoutId)}${replaceEntryId ? `&replaceEntryId=${encodeURIComponent(replaceEntryId)}` : ''}`
+                            : '/workouts/exercises/new'
+                    )}
                     className="text-brand p-2 bg-brand/10 rounded-full hover:bg-brand/20 transition-colors"
                 >
                     <CreateIcon size={22} weight="bold" />
@@ -155,7 +239,9 @@ export default function ExerciseSelector() {
                         className="w-full bg-brand text-white py-4 rounded-2xl font-bold shadow-xl flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all"
                         onClick={addSelectedExercises}
                     >
-                        Add {selectedCount} Exercise{selectedCount > 1 ? 's' : ''}
+                        {isReplaceMode
+                            ? 'Replace Exercise'
+                            : `Add ${selectedCount} Exercise${selectedCount > 1 ? 's' : ''}`}
                     </button>
                 </div>
             )}

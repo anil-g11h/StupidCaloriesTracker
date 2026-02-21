@@ -198,12 +198,57 @@ export interface WorkoutSet {
   set_number: number;
   weight?: number;
   reps?: number;
+  reps_min?: number;
+  reps_max?: number;
   distance?: number;
   duration_seconds?: number;
   rpe?: number;
   is_warmup?: boolean;
   completed?: boolean;
   created_at?: Date;
+  synced?: number;
+}
+
+export interface WorkoutRoutine {
+  id: string;
+  user_id: string;
+  name: string;
+  notes?: string;
+  created_at?: Date;
+  updated_at?: Date;
+  synced?: number;
+}
+
+export interface WorkoutRoutineEntry {
+  id: string;
+  routine_id: string;
+  exercise_id: string;
+  sort_order: number;
+  notes?: string;
+  created_at?: Date;
+  synced?: number;
+}
+
+export interface WorkoutRoutineSet {
+  id: string;
+  routine_entry_id: string;
+  set_number: number;
+  weight?: number;
+  reps_min?: number;
+  reps_max?: number;
+  distance?: number;
+  duration_seconds?: number;
+  created_at?: Date;
+  synced?: number;
+}
+
+export interface WorkoutRestPreference {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  rest_seconds: number;
+  created_at?: Date;
+  updated_at?: Date;
   synced?: number;
 }
 
@@ -223,10 +268,14 @@ export class MyDatabase extends Dexie {
   workouts!: Table<Workout>;
   workout_log_entries!: Table<WorkoutLogEntry>;
   workout_sets!: Table<WorkoutSet>;
+  workout_rest_preferences!: Table<WorkoutRestPreference>;
+  workout_routines!: Table<WorkoutRoutine>;
+  workout_routine_entries!: Table<WorkoutRoutineEntry>;
+  workout_routine_sets!: Table<WorkoutRoutineSet>;
 
   constructor() {
     super('StupidCaloriesTrackerDB');
-    this.version(3).stores({
+    this.version(4).stores({
       profiles: 'id',
       foods: 'id, user_id, name, is_recipe, synced',
       food_ingredients: 'id, parent_food_id, child_food_id, synced',
@@ -241,14 +290,37 @@ export class MyDatabase extends Dexie {
       workout_exercises_def: 'id, user_id, name, muscle_group, metric_type, synced',
       workouts: 'id, user_id, start_time, synced',
       workout_log_entries: 'id, workout_id, exercise_id, synced',
-      workout_sets: 'id, workout_log_entry_id, synced'
+      workout_sets: 'id, workout_log_entry_id, synced',
+      workout_rest_preferences: 'id, user_id, exercise_id, [user_id+exercise_id], updated_at, synced'
+    });
+
+    this.version(5).stores({
+      profiles: 'id',
+      foods: 'id, user_id, name, is_recipe, synced',
+      food_ingredients: 'id, parent_food_id, child_food_id, synced',
+      logs: 'id, user_id, date, meal_type, synced',
+      goals: 'id, user_id, start_date, synced',
+      metrics: 'id, user_id, date, type, synced',
+      settings: 'id, user_id, synced',
+      activities: 'id, user_id, name, synced',
+      activity_logs: 'id, user_id, date, activity_id, synced',
+      sync_queue: '++id, table, action, created_at',
+      workout_exercises_def: 'id, user_id, name, muscle_group, metric_type, synced',
+      workouts: 'id, user_id, start_time, synced',
+      workout_log_entries: 'id, workout_id, exercise_id, synced',
+      workout_sets: 'id, workout_log_entry_id, synced',
+      workout_rest_preferences: 'id, user_id, exercise_id, [user_id+exercise_id], updated_at, synced',
+      workout_routines: 'id, user_id, name, updated_at, synced',
+      workout_routine_entries: 'id, routine_id, exercise_id, sort_order, synced',
+      workout_routine_sets: 'id, routine_entry_id, synced'
     });
     
     // Hooks for sync
     const tablesToSync = [
         'profiles', 'foods', 'food_ingredients', 'logs', 'goals', 'metrics', 
         'activities', 'activity_logs',
-        'workout_exercises_def', 'workouts', 'workout_log_entries', 'workout_sets'
+        'workout_exercises_def', 'workouts', 'workout_log_entries', 'workout_sets', 'workout_rest_preferences',
+        'workout_routines', 'workout_routine_entries', 'workout_routine_sets'
     ] as const;
 
     tablesToSync.forEach((tableName) => {
