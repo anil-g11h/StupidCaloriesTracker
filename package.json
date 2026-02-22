@@ -6,7 +6,9 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"seed:workouts:sql": "node scripts/generate-workout-seed-sql.mjs --mode=wipe --out=supabase/seed_workout_exercises_from_assets.sql",
+		"seed:workouts:sql:upsert": "node scripts/generate-workout-seed-sql.mjs --mode=upsert --out=supabase/seed_workout_exercises_from_assets_upsert.sql"
 	},
 	"devDependencies": {
 		"@supabase/supabase-js": "^2.97.0",

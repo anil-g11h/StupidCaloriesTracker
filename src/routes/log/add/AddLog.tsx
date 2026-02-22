@@ -93,7 +93,6 @@ export default function AddLogEntry() {
   const [selectedUnit, setSelectedUnit] = useState('serving');
   const [addedCount, setAddedCount] = useState(0);
   const [addedFoodIds, setAddedFoodIds] = useState<string[]>([]);
-  const [sortMode, setSortMode] = useState<'default' | 'eaa-gap'>('default');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const settingsRow = useLiveQuery(async () => db.settings.get('local-settings'), []);
@@ -255,39 +254,14 @@ export default function AddLogEntry() {
   }, [eaaDeficit]);
 
   const rankedSearchResults = useMemo(() => {
-    if (!searchResults) return [];
-    if (sortMode === 'default') {
-      return searchResults.map((food) => ({
-        food,
-        score: 0,
-        bestGroup: null as EaaRatioGroupKey | null
-      }));
-    }
-
-    return [...searchResults]
-      .map((food) => {
-        const scoreData = scoreFoodForEaaDeficit(food.micros, eaaDeficit, 1);
-        const rankedGroups = (Object.keys(scoreData.filledByGroup) as EaaRatioGroupKey[])
-          .map((group) => ({ group, value: scoreData.filledByGroup[group] }))
-          .sort((a, b) => b.value - a.value);
-
-        return {
-          food,
-          score: scoreData.score,
-          bestGroup: rankedGroups[0]?.value > 0 ? rankedGroups[0].group : null
-        };
-      })
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return b.food.protein - a.food.protein;
-      });
-  }, [searchResults, sortMode, eaaDeficit]);
+    return searchResults || [];
+  }, [searchResults]);
 
   const foodWarningsById = useLiveQuery(
     async () => {
       if (!hasDietaryProfile || rankedSearchResults.length === 0) return {} as Record<string, string[]>;
 
-      const parentFoodIds = rankedSearchResults.map((item) => item.food.id);
+      const parentFoodIds = rankedSearchResults.map((food) => food.id);
       const ingredientRows = await db.food_ingredients.where('parent_food_id').anyOf(parentFoodIds).toArray();
 
       const childFoodIds = [...new Set(ingredientRows.map((item) => item.child_food_id))];
@@ -304,10 +278,10 @@ export default function AddLogEntry() {
         return acc;
       }, {});
 
-      return rankedSearchResults.reduce<Record<string, string[]>>((acc, item) => {
-        const warnings = getDietaryConflictWarnings(dietaryPreferences, item.food, ingredientNamesByParent[item.food.id] || []);
+      return rankedSearchResults.reduce<Record<string, string[]>>((acc, food) => {
+        const warnings = getDietaryConflictWarnings(dietaryPreferences, food, ingredientNamesByParent[food.id] || []);
         if (warnings.length > 0) {
-          acc[item.food.id] = warnings;
+          acc[food.id] = warnings;
         }
         return acc;
       }, {});
@@ -641,40 +615,10 @@ export default function AddLogEntry() {
               className="w-full p-3 bg-surface text-text-main border border-transparent rounded-lg shadow-sm focus:ring-2 focus:ring-brand focus:outline-none"
             />
           </div>
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-[11px] text-text-muted">Sort foods by daily EAA gap fill</p>
-            <div className="rounded-lg border border-border-subtle bg-surface p-1 flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setSortMode('default')}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-colors ${sortMode === 'default' ? 'bg-brand text-brand-fg' : 'text-text-muted hover:text-text-main'}`}
-              >
-                Default
-              </button>
-              <button
-                type="button"
-                onClick={() => setSortMode('eaa-gap')}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-colors ${sortMode === 'eaa-gap' ? 'bg-brand text-brand-fg' : 'text-text-muted hover:text-text-main'}`}
-              >
-                EAA Gap
-              </button>
-            </div>
-          </div>
           <div className="space-y-2">
-            {rankedSearchResults?.map(({ food, score, bestGroup }) => {
+            {rankedSearchResults && rankedSearchResults.length > 0 ? rankedSearchResults.map((food) => {
               const alreadyAdded = mealLogIdsByFood.has(food.id) || addedFoodIds.includes(food.id);
               const warnings = foodWarningsById[food.id] || [];
-
-              const bestGroupLabel =
-                bestGroup === 'leucine'
-                  ? 'Leucine'
-                  : bestGroup === 'lysine'
-                    ? 'Lysine'
-                    : bestGroup === 'valineIsoleucine'
-                      ? 'Val+Iso'
-                      : bestGroup === 'rest'
-                        ? 'Rest EAAs'
-                        : null;
 
               return (
                 <div
@@ -687,13 +631,6 @@ export default function AddLogEntry() {
                     <div className="text-sm text-text-muted">
                       {food.brand ? `${food.brand} • ` : ''}{food.calories} cal / {formatServingLabel(food)}
                     </div>
-                    {sortMode === 'eaa-gap' && (
-                      <div className="text-[11px] text-text-muted mt-1">
-                        {score > 0
-                          ? `EAA fit +${(Math.round(score * 100) / 100).toFixed(2)}g${bestGroupLabel ? ` (${bestGroupLabel})` : ''}`
-                          : 'No EAA gap contribution'}
-                      </div>
-                    )}
                     <MacroContributionBar
                       protein={food.protein}
                       carbs={food.carbs}
@@ -720,7 +657,19 @@ export default function AddLogEntry() {
                   </button>
                 </div>
               );
-            }) || <div className="text-center text-text-muted mt-8 italic">Start typing to search...</div>}
+            }) : searchQuery.trim().length > 0 ? (
+              <div className="text-center text-text-muted mt-8">
+                <p className="italic">No foods found for "{searchQuery.trim()}".</p>
+                <Link
+                  to={`/foods/new?name=${encodeURIComponent(searchQuery.trim())}`}
+                  className="inline-block mt-3 px-4 py-2 rounded-lg bg-brand text-brand-fg font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Create Food
+                </Link>
+              </div>
+            ) : (
+              <div className="text-center text-text-muted mt-8 italic">Start typing to search...</div>
+            )}
           </div>
         </>
       ) : (

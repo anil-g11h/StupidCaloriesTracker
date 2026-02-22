@@ -11,6 +11,7 @@ import {
 import { db, type WorkoutExerciseDef } from '../../../lib/db';
 import { generateId } from '../../../lib';
 import { useStackNavigation } from '../../../lib/useStackNavigation';
+import { syncWorkoutExerciseThumbnailPaths } from '../../../lib/workoutMedia';
 
 const MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Cardio', 'Other'];
 const EQUIPMENT_TYPES = ['Barbell', 'Dumbbell', 'Machine', 'Cable', 'Bodyweight', 'Kettlebell', 'Band', 'None'];
@@ -31,6 +32,8 @@ const toWorkoutMediaUrl = (path?: string | null) => {
     const normalizedBase = base.endsWith('/') ? base : `${base}/`;
     return `${normalizedBase}${path.replace(/^\/+/, '')}`;
 };
+
+const DEFAULT_EXERCISE_THUMBNAIL_PATH = 'workouts/images/exercise-default-thumb.svg';
 
 const normalizeName = (value: string) =>
     value
@@ -72,6 +75,7 @@ export default function ExerciseSelector() {
     const [selectedEquipment, setSelectedEquipment] = useState('All');
     const [selected, setSelected] = useState<Record<string, boolean>>({});
     const [mediaFallbackByExerciseId, setMediaFallbackByExerciseId] = useState<Record<string, { videoPath?: string; thumbnailPath?: string }>>({});
+    const [isResettingLocalDb, setIsResettingLocalDb] = useState(false);
 
     // --- Data Fetching ---
     const allExercises = useLiveQuery(async () => {
@@ -117,6 +121,7 @@ export default function ExerciseSelector() {
                 if (!response.ok) return;
                 const mediaMap = (await response.json()) as WorkoutMediaMap;
                 const mediaEntries = mediaMap.media || [];
+                void syncWorkoutExerciseThumbnailPaths(mediaEntries);
 
                 const bySourceId = new Map(mediaEntries.map((entry) => [entry.sourceId, entry]));
                 const byNormalizedName = mediaEntries.map((entry) => ({
@@ -260,6 +265,24 @@ export default function ExerciseSelector() {
     pop();
     }
 
+    const handleResetLocalDb = async () => {
+        if (!import.meta.env.DEV || isResettingLocalDb) return;
+
+        const shouldReset = window.confirm('Reset local app data? This will clear IndexedDB and local storage, then reload the app.');
+        if (!shouldReset) return;
+
+        setIsResettingLocalDb(true);
+        try {
+            localStorage.clear();
+            sessionStorage.clear();
+            await db.delete();
+            window.location.reload();
+        } catch (error) {
+            console.error('[ExercisesList] Failed to reset local DB', error);
+            setIsResettingLocalDb(false);
+        }
+    };
+
     return (
         <div className="pb-24 pt-4 px-4 max-w-md mx-auto bg-background min-h-screen">
             {/* Header */}
@@ -291,6 +314,18 @@ export default function ExerciseSelector() {
                     <CreateIcon size={22} weight="bold" />
                 </button>
             </header>
+
+            {import.meta.env.DEV ? (
+                <div className="mb-4">
+                    <button
+                        onClick={handleResetLocalDb}
+                        disabled={isResettingLocalDb}
+                        className="text-xs font-semibold text-red-600 underline disabled:opacity-60"
+                    >
+                        {isResettingLocalDb ? 'Resetting local data...' : 'Reset local DB (tmp)'}
+                    </button>
+                </div>
+            ) : null}
 
             {/* Search Bar */}
             <div className="relative mb-6">
@@ -343,8 +378,10 @@ export default function ExerciseSelector() {
                 {filteredExercises.map((exercise) => (
                     (() => {
                         const fallbackMedia = mediaFallbackByExerciseId[exercise.id];
-                        const thumbnailPath = exercise.thumbnail_path || fallbackMedia?.thumbnailPath;
-                        const videoPath = exercise.video_path || fallbackMedia?.videoPath;
+                        const thumbnailPath =
+                            exercise.thumbnail_path ||
+                            fallbackMedia?.thumbnailPath ||
+                            DEFAULT_EXERCISE_THUMBNAIL_PATH;
 
                         return (
                     <div
@@ -356,24 +393,14 @@ export default function ExerciseSelector() {
                             }`}
                     >
                         <div className="flex items-center gap-3 min-w-0">
-                            {(thumbnailPath || videoPath) ? (
+                            {thumbnailPath ? (
                                 <div className="h-14 w-14 rounded-lg overflow-hidden border border-border-subtle bg-surface shrink-0">
-                                    {thumbnailPath ? (
-                                        <img
-                                            src={toWorkoutMediaUrl(thumbnailPath)}
-                                            alt={exercise.name}
-                                            className="h-full w-full object-cover"
-                                            loading="lazy"
-                                        />
-                                    ) : videoPath ? (
-                                        <video
-                                            src={toWorkoutMediaUrl(videoPath)}
-                                            className="h-full w-full object-cover"
-                                            muted
-                                            playsInline
-                                            preload="metadata"
-                                        />
-                                    ) : null}
+                                    <img
+                                        src={toWorkoutMediaUrl(thumbnailPath)}
+                                        alt={exercise.name}
+                                        className="h-full w-full object-cover"
+                                        loading="lazy"
+                                    />
                                 </div>
                             ) : null}
                             <div className="min-w-0">
@@ -381,9 +408,6 @@ export default function ExerciseSelector() {
                             <div className="text-xs text-text-muted mt-1 uppercase tracking-wider font-semibold">
                                 {exercise.muscle_group} • {exercise.equipment}
                             </div>
-                                {videoPath ? (
-                                    <div className="text-[10px] font-semibold text-brand mt-1 uppercase tracking-wide">Video available</div>
-                                ) : null}
                             </div>
                         </div>
                         {/* Checkbox icon removed */}
@@ -415,33 +439,4 @@ export default function ExerciseSelector() {
             )}
         </div>
     );
-}
-
-/**
- * Seeds default exercises if the database is empty.
- */
-async function seedDefaults() {
-    const defaults = [
-        { name: 'Bench Press', muscle_group: 'Chest', equipment: 'Barbell', metric_type: 'weight_reps' },
-        { name: 'Squat', muscle_group: 'Legs', equipment: 'Barbell', metric_type: 'weight_reps' },
-        { name: 'Deadlift', muscle_group: 'Back', equipment: 'Barbell', metric_type: 'weight_reps' },
-        { name: 'Overhead Press', muscle_group: 'Shoulders', equipment: 'Barbell', metric_type: 'weight_reps' },
-        { name: 'Pull Up', muscle_group: 'Back', equipment: 'Bodyweight', metric_type: 'weighted_bodyweight' },
-        { name: 'Running', muscle_group: 'Cardio', equipment: 'None', metric_type: 'distance_duration' }
-    ];
-
-    await db.transaction('rw', db.workout_exercises_def, async () => {
-        for (const d of defaults) {
-            await db.workout_exercises_def.add({
-                id: generateId(),
-                user_id: null,
-                name: d.name,
-                muscle_group: d.muscle_group,
-                equipment: d.equipment,
-                metric_type: d.metric_type as any,
-                created_at: new Date(),
-                synced: 0
-            });
-        }
-    });
 }

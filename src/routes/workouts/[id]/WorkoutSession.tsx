@@ -24,6 +24,7 @@ import {
 import { useStackNavigation } from '../../../lib/useStackNavigation';
 import { useWorkoutSession } from './useWorkoutSession';
 import { DurationScrollerInput, getMetricColumns } from '../components/WorkoutSetComponents';
+import { syncWorkoutExerciseThumbnailPaths } from '../../../lib/workoutMedia';
 
 
 
@@ -45,6 +46,8 @@ const toWorkoutMediaUrl = (path?: string | null) => {
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
   return `${normalizedBase}${path.replace(/^\/+/, '')}`;
 };
+
+const DEFAULT_EXERCISE_THUMBNAIL_PATH = 'workouts/images/exercise-default-thumb.svg';
 
 type WorkoutMediaEntry = {
   sourceId: string;
@@ -250,8 +253,11 @@ const CompletedWorkoutView = ({
       {exercises?.map((exercise) => {
         const definition = definitions?.[exercise.exercise_id];
         const fallbackMedia = mediaFallbackByExerciseId?.[exercise.exercise_id];
-        const headerThumbnailUrl = toWorkoutMediaUrl(definition?.thumbnail_path || fallbackMedia?.thumbnailPath);
-        const headerVideoUrl = toWorkoutMediaUrl(definition?.video_path || fallbackMedia?.videoPath);
+        const headerThumbnailUrl = toWorkoutMediaUrl(
+          definition?.thumbnail_path ||
+          fallbackMedia?.thumbnailPath ||
+          DEFAULT_EXERCISE_THUMBNAIL_PATH
+        );
         const currentSets = sets?.[exercise.id] || [];
         if (currentSets.length === 0) return null;
 
@@ -262,26 +268,14 @@ const CompletedWorkoutView = ({
                 to={`/workouts/exercises/${encodeURIComponent(exercise.exercise_id)}`}
                 className="flex items-center gap-3 min-w-0 rounded-lg -m-1 p-1"
               >
-                {(headerThumbnailUrl || headerVideoUrl) ? (
-                  <div className="h-12 w-12 rounded-lg overflow-hidden bg-surface flex-shrink-0">
-                    {headerThumbnailUrl ? (
-                      <img
-                        src={headerThumbnailUrl}
-                        alt={definition?.name || 'Workout exercise'}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <video
-                        src={headerVideoUrl}
-                        className="h-full w-full object-cover"
-                        muted
-                        playsInline
-                        preload="metadata"
-                      />
-                    )}
-                  </div>
-                ) : null}
+                <div className="h-12 w-12 rounded-lg overflow-hidden bg-surface flex-shrink-0">
+                  <img
+                    src={headerThumbnailUrl}
+                    alt={definition?.name || 'Workout exercise'}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
                 <div className="min-w-0">
                   <span className="font-bold text-lg text-brand truncate block hover:underline">
                     {definition?.name || 'Exercise'}
@@ -572,6 +566,7 @@ const WorkoutSessionComponent = () => {
 
         const mediaMap = (await response.json()) as WorkoutMediaMap;
         const mediaEntries = mediaMap.media || [];
+        void syncWorkoutExerciseThumbnailPaths(mediaEntries);
 
         const bySourceId = new Map(mediaEntries.map((entry) => [entry.sourceId, entry]));
         const byNormalizedName = mediaEntries.map((entry) => ({
@@ -847,7 +842,9 @@ const WorkoutSessionComponent = () => {
               const isFirstExercise = exerciseIndex === 0;
               const isLastExercise = exerciseIndex === (exercises.length - 1);
               const isDurationOnlyMetric = metricColumns.first.field === 'duration_seconds' && metricColumns.second.field === null;
-              const thumbnailUrl = toWorkoutMediaUrl(def?.thumbnail_path || fallbackMedia?.thumbnailPath);
+              const thumbnailUrl = toWorkoutMediaUrl(
+                def?.thumbnail_path || fallbackMedia?.thumbnailPath || DEFAULT_EXERCISE_THUMBNAIL_PATH
+              );
 
               return (
                 <div key={exercise.id} className="bg-card rounded-2xl p-4 shadow-sm border border-border-subtle">
@@ -857,16 +854,14 @@ const WorkoutSessionComponent = () => {
                         to={`/workouts/exercises/${encodeURIComponent(exercise.exercise_id)}`}
                         className="flex items-center gap-3 min-w-0 rounded-lg -m-1 p-1"
                       >
-                        {thumbnailUrl ? (
-                          <div className="h-12 w-12 rounded-lg overflow-hidden bg-surface flex-shrink-0">
-                            <img
-                              src={thumbnailUrl}
-                              alt={def?.name || 'Workout exercise'}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          </div>
-                        ) : null}
+                        <div className="h-12 w-12 rounded-lg overflow-hidden bg-surface flex-shrink-0">
+                          <img
+                            src={thumbnailUrl}
+                            alt={def?.name || 'Workout exercise'}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
                         <div className="min-w-0">
                           <span className="font-bold text-lg text-brand truncate block hover:underline">
                             {def?.name || 'Exercise'}

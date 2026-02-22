@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom';
 import { db } from '../../lib/db';
 import { generateId } from '../../lib';
 import { useStackNavigation } from '../../lib/useStackNavigation';
+import { syncWorkoutExerciseThumbnailPaths } from '../../lib/workoutMedia';
 
 type WorkoutMediaEntry = {
   sourceId: string;
@@ -30,6 +31,8 @@ const toWorkoutMediaUrl = (path?: string | null) => {
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
   return `${normalizedBase}${path.replace(/^\/+/, '')}`;
 };
+
+const DEFAULT_EXERCISE_THUMBNAIL_PATH = 'workouts/images/exercise-default-thumb.svg';
 
 const normalizeName = (value: string) =>
   value
@@ -93,7 +96,9 @@ export default function WorkoutList() {
         const response = await fetch(toWorkoutMediaUrl('workouts/media-map.json'), { cache: 'no-cache' });
         if (!response.ok) return;
         const mediaMap = (await response.json()) as WorkoutMediaMap;
-        if (!cancelled) setMediaEntries(mediaMap.media || []);
+        const nextMediaEntries = mediaMap.media || [];
+        void syncWorkoutExerciseThumbnailPaths(nextMediaEntries);
+        if (!cancelled) setMediaEntries(nextMediaEntries);
       } catch {
         if (!cancelled) setMediaEntries([]);
       }
@@ -434,9 +439,8 @@ export default function WorkoutList() {
 
                 const preview = summary?.previewExercise;
                 let previewThumbnailPath = preview?.thumbnailPath;
-                let previewVideoPath = preview?.videoPath;
 
-                if ((!previewThumbnailPath && !previewVideoPath) && preview?.name) {
+                if (!previewThumbnailPath && preview?.name) {
                   let matched: WorkoutMediaEntry | undefined;
 
                   if (preview.sourceId) {
@@ -454,12 +458,8 @@ export default function WorkoutList() {
 
                   if (matched) {
                     previewThumbnailPath = matched.thumbnailPath || undefined;
-                    previewVideoPath = matched.videoPath;
                   }
                 }
-
-                const thumbnailUrl = toWorkoutMediaUrl(previewThumbnailPath);
-                const videoUrl = toWorkoutMediaUrl(previewVideoPath);
 
                 return (
                   <>
@@ -489,9 +489,8 @@ export default function WorkoutList() {
                           {visibleLines.map((line, index) => (
                             (() => {
                               let lineThumbnailPath = line.thumbnailPath;
-                              let lineVideoPath = line.videoPath;
 
-                              if ((!lineThumbnailPath && !lineVideoPath) && line.name) {
+                              if (!lineThumbnailPath && line.name) {
                                 let matched: WorkoutMediaEntry | undefined;
 
                                 if (line.sourceId) {
@@ -509,33 +508,23 @@ export default function WorkoutList() {
 
                                 if (matched) {
                                   lineThumbnailPath = matched.thumbnailPath || undefined;
-                                  lineVideoPath = matched.videoPath;
                                 }
                               }
 
-                              const lineThumbnailUrl = toWorkoutMediaUrl(lineThumbnailPath);
-                              const lineVideoUrl = toWorkoutMediaUrl(lineVideoPath);
+                              const lineThumbnailUrl = toWorkoutMediaUrl(
+                                lineThumbnailPath || DEFAULT_EXERCISE_THUMBNAIL_PATH
+                              );
 
                               return (
                                 <div key={`${line.name}-${index}`} className="flex items-center gap-2.5 min-w-0">
-                                  {(lineThumbnailUrl || lineVideoUrl) ? (
+                                  {lineThumbnailUrl ? (
                                     <div className="h-8 w-8 rounded-md overflow-hidden bg-card border border-border-subtle shrink-0">
-                                      {lineThumbnailUrl ? (
-                                        <img
-                                          src={lineThumbnailUrl}
-                                          alt={line.name || 'Exercise'}
-                                          className="h-full w-full object-cover"
-                                          loading="lazy"
-                                        />
-                                      ) : (
-                                        <video
-                                          src={lineVideoUrl}
-                                          className="h-full w-full object-cover"
-                                          muted
-                                          playsInline
-                                          preload="metadata"
-                                        />
-                                      )}
+                                      <img
+                                        src={lineThumbnailUrl}
+                                        alt={line.name || 'Exercise'}
+                                        className="h-full w-full object-cover"
+                                        loading="lazy"
+                                      />
                                     </div>
                                   ) : null}
 

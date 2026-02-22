@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom'; // Assuming React Router
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'; // Assuming React Router
 import { db } from '../../../lib/db';
 import { ESSENTIAL_AMINO_ACIDS } from '../../../lib/constants';
 import { generateId } from '../../../lib';
@@ -256,6 +256,7 @@ function normalizeRecipeIngredientUnit(rawUnit?: string): string {
 const CreateFood: React.FC = () => {
   const { id: editFoodId } = useParams<{ id?: string }>();
   const isEditMode = Boolean(editFoodId);
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const {pop} = useStackNavigation();
   // --- State ---
@@ -293,6 +294,17 @@ const CreateFood: React.FC = () => {
 
   const [isFetching, setIsFetching] = useState(false);
   const hydratedFoodIdRef = useRef<string | null>(null);
+  const hasPrefilledNameRef = useRef(false);
+
+  useEffect(() => {
+    if (isEditMode || hasPrefilledNameRef.current || name.trim().length > 0) return;
+
+    const prefillName = (searchParams.get('name') || '').trim();
+    if (!prefillName) return;
+
+    setName(prefillName);
+    hasPrefilledNameRef.current = true;
+  }, [isEditMode, name, searchParams]);
 
   useEffect(() => {
     if (!editFoodId) return;

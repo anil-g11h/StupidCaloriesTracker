@@ -46,8 +46,9 @@ Write sections in this order:
 
 ## Data Seeding Policy
 
-- Seed scripts and generated seed SQL files are intentionally removed from this repository.
-- If reference data is required in production, model it as a migration-safe, idempotent **reference-data migration** with explicit keys and `on conflict` handling.
+- Workout exercise reference data is seeded from static assets using `npm run seed:workouts:sql`.
+- Generated output is written to `supabase/seed_workout_exercises_from_assets.sql`.
+- If additional reference data is required in production, model it as a migration-safe, idempotent **reference-data migration** with explicit keys and `on conflict` handling.
 - If data is only for local/dev experiments, keep it outside versioned migrations.
 
 ## Query Patterns to Prefer

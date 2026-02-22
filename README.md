@@ -84,7 +84,7 @@ Open your browser and navigate to `http://localhost:5173` (or the port shown in 
 Database changes are migration-first. Instead of applying large SQL files manually, add a new file in `supabase/migrations` for each schema/data evolution and run it in order.
 
 - Migration files are timestamp-prefixed (for example, `20260221_add_workout_routines.sql`).
-- Existing seed scripts have been removed from the repository.
+- Workout exercise seed SQL is generated from media assets via `npm run seed:workouts:sql`.
 - Use idempotent SQL where possible (`if exists`, `if not exists`, guarded updates).
 
 See `supabase/MIGRATIONS.md` for the full migration authoring guide and checklist.
