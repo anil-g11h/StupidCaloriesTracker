@@ -12,7 +12,7 @@ To complete the PWA setup for iPhone home screen support, follow these steps:
 
 2.  **Verify Configuration**
     -   The `vite.config.ts` is configured to look for these icons in the manifest.
-    -   The `src/app.html` includes the necesary meta tags for iOS.
+    -   The `index.html` file contains the app shell entrypoint.
 
 3.  **Deploy / Test**
     -   Build the app: `npm run build`

@@ -1,6 +1,6 @@
 # Stupid Calorie Tracker
 
-A straightforward calorie tracking application built with SvelteKit and Supabase, designed for simplicity and offline capability.
+A straightforward calorie tracking application built with React, Vite, and Supabase, designed for simplicity and offline capability.
 
 ## Project Overview
 

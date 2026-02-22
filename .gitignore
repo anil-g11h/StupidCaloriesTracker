@@ -47,6 +47,10 @@ temp_page.svelte
 # Ignore PWA generated files
 *.webmanifest
 
+# Local TypeScript emit artifacts (source files are .ts/.tsx)
+src/**/*.js
+src/**/*.js.map
+
 # Misc
 *.swp
 *.swo
