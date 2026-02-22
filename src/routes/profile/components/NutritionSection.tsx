@@ -15,26 +15,26 @@ export function NutritionSection({
   nutrition,
   updateNutrition,
   macroTrackRef,
+  draggingMacroHandle,
   macroFirstCut,
   macroSecondCut,
   setDraggingMacroHandle,
   proteinGramsDisplay,
   carbGramsDisplay,
-  fatGramsDisplay,
-  macroSum
+  fatGramsDisplay
 }: {
   isOpen: boolean;
   onToggle: () => void;
   nutrition: NutritionValues;
   updateNutrition: (patch: Partial<NutritionValues>) => void;
   macroTrackRef: React.RefObject<HTMLDivElement | null>;
+  draggingMacroHandle: 'first' | 'second' | null;
   macroFirstCut: number;
   macroSecondCut: number;
   setDraggingMacroHandle: (value: 'first' | 'second') => void;
   proteinGramsDisplay: number;
   carbGramsDisplay: number;
   fatGramsDisplay: number;
-  macroSum: number;
 }) {
   const pickNearestHandle = (clientX: number) => {
     if (!macroTrackRef.current) return;
@@ -44,6 +44,9 @@ export function NutritionSection({
     const distToSecond = Math.abs(clickPercent - macroSecondCut);
     setDraggingMacroHandle(distToFirst <= distToSecond ? 'first' : 'second');
   };
+
+  const isFirstActive = draggingMacroHandle === 'first';
+  const isSecondActive = draggingMacroHandle === 'second';
 
   return (
     <OptionCard
@@ -89,6 +92,8 @@ export function NutritionSection({
             </div>
           </div>
 
+          <div className="text-[11px] text-text-muted text-center font-medium">Drag the handles to adjust macro split</div>
+
           <div
             ref={macroTrackRef}
             className="relative h-10 select-none touch-none"
@@ -105,14 +110,14 @@ export function NutritionSection({
             }}
           >
             <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-6 rounded-full overflow-hidden border border-border-subtle flex">
-              <div className="h-full bg-brand flex items-center justify-center" style={{ width: `${macroFirstCut}%` }}>
-                <span className="text-[10px] font-bold text-brand-fg whitespace-nowrap">{nutrition.proteinPercent}%</span>
+              <div className="h-full bg-brand flex items-center justify-center transition-[width] duration-200 ease-out" style={{ width: `${macroFirstCut}%` }}>
+                <span className="text-[10px] font-bold text-brand-fg whitespace-nowrap transition-all duration-200">{nutrition.proteinPercent}%</span>
               </div>
-              <div className="h-full bg-surface flex items-center justify-center" style={{ width: `${macroSecondCut - macroFirstCut}%` }}>
-                <span className="text-[10px] font-bold text-text-main whitespace-nowrap">{nutrition.carbPercent}%</span>
+              <div className="h-full bg-surface flex items-center justify-center transition-[width] duration-200 ease-out" style={{ width: `${macroSecondCut - macroFirstCut}%` }}>
+                <span className="text-[10px] font-bold text-text-main whitespace-nowrap transition-all duration-200">{nutrition.carbPercent}%</span>
               </div>
-              <div className="h-full bg-macro-fat flex items-center justify-center" style={{ width: `${100 - macroSecondCut}%` }}>
-                <span className="text-[10px] font-bold text-white whitespace-nowrap">{nutrition.fatPercent}%</span>
+              <div className="h-full bg-macro-fat flex items-center justify-center transition-[width] duration-200 ease-out" style={{ width: `${100 - macroSecondCut}%` }}>
+                <span className="text-[10px] font-bold text-white whitespace-nowrap transition-all duration-200">{nutrition.fatPercent}%</span>
               </div>
             </div>
 
@@ -130,10 +135,14 @@ export function NutritionSection({
                 e.stopPropagation();
                 setDraggingMacroHandle('first');
               }}
-              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 rounded-full border border-border-subtle bg-card shadow-sm touch-none"
+              className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 rounded-full border bg-card shadow-sm touch-none cursor-ew-resize transition-all duration-150 ${
+                isFirstActive ? 'border-brand scale-110 ring-2 ring-brand/25' : 'border-border-subtle'
+              }`}
               style={{ left: `${macroFirstCut}%` }}
               aria-label="Adjust protein/carbs split"
-            />
+            >
+              <span aria-hidden="true" className="mx-auto block h-3 w-[2px] rounded-full bg-text-muted" />
+            </button>
 
             <button
               type="button"
@@ -149,15 +158,15 @@ export function NutritionSection({
                 e.stopPropagation();
                 setDraggingMacroHandle('second');
               }}
-              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 rounded-full border border-border-subtle bg-card shadow-sm touch-none"
+              className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 rounded-full border bg-card shadow-sm touch-none cursor-ew-resize transition-all duration-150 ${
+                isSecondActive ? 'border-brand scale-110 ring-2 ring-brand/25' : 'border-border-subtle'
+              }`}
               style={{ left: `${macroSecondCut}%` }}
               aria-label="Adjust carbs/fat split"
-            />
+            >
+              <span aria-hidden="true" className="mx-auto block h-3 w-[2px] rounded-full bg-text-muted" />
+            </button>
           </div>
-        </div>
-
-        <div className="col-span-2 text-xs text-text-muted">
-          Macro total: <span className={macroSum === 100 ? 'text-text-main font-bold' : 'text-text-main'}>{macroSum}%</span>
         </div>
       </div>
     </OptionCard>

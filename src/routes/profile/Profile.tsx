@@ -28,6 +28,7 @@ export default function ProfileSettings() {
     mealInputMode,
     setMealInputMode,
     macroTrackRef,
+    draggingMacroHandle,
     setDraggingMacroHandle,
     form,
     dietaryForm,
@@ -39,7 +40,6 @@ export default function ProfileSettings() {
     proteinGramsDisplay,
     carbGramsDisplay,
     fatGramsDisplay,
-    macroSum,
     totalMealPercent,
     totalMealCalories,
     canSaveSettings,
@@ -151,13 +151,13 @@ export default function ProfileSettings() {
             nutrition={form.nutrition}
             updateNutrition={updateNutrition}
             macroTrackRef={macroTrackRef}
+            draggingMacroHandle={draggingMacroHandle}
             macroFirstCut={macroFirstCut}
             macroSecondCut={macroSecondCut}
             setDraggingMacroHandle={setDraggingMacroHandle}
             proteinGramsDisplay={proteinGramsDisplay}
             carbGramsDisplay={carbGramsDisplay}
             fatGramsDisplay={fatGramsDisplay}
-            macroSum={macroSum}
           />
 
           <DietarySection
