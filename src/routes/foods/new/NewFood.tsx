@@ -4,12 +4,7 @@ import { db } from '../../../lib/db';
 import { ESSENTIAL_AMINO_ACIDS } from '../../../lib/constants';
 import { generateId } from '../../../lib';
 import { useStackNavigation } from '../../../lib/useStackNavigation';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-
-
-const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-const geminiModel = 'gemini-2.5-flash';
+import { fetchGeminiNutritionProfile } from '../../../lib/gemini';
 
 const ESSENTIAL_VITAMIN_KEYS = [
   'Vitamin A',
@@ -433,43 +428,14 @@ const CreateFood: React.FC = () => {
 
   const fetchAiData = async () => {
     if (!name) return alert("Please enter a food name first");
-    if (!geminiApiKey) {
-      return alert("Missing Gemini API key. Set VITE_GEMINI_API_KEY in your .env file.");
-    }
     
     setIsFetching(true);
     try {
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: geminiModel,
-        generationConfig: { responseMimeType: "application/json" }
+      const data = await fetchGeminiNutritionProfile({
+        name,
+        servingSize,
+        servingUnit
       });
-
-      const prompt = `Act as a clinical nutrition database. Provide the full nutritional profile for "${name}" specifically for a serving size of ${servingSize}${servingUnit}.
-    Return data ONLY as raw JSON with keys: "protein", "fat", "carbs", "calories", "micros", "diet_tags", "allergen_tags", "ai_notes".
-
-    EXACT_MICROS_KEYS:
-    ${EXACT_MICROS_KEYS_TEXT}
-
-    MICROS_UNIT_CONTRACT:
-    ${MICROS_UNIT_CONTRACT_TEXT}
-
-    FOOD_DIET_TAG_ALLOWED_VALUES:
-    ${[...ALLOWED_FOOD_DIET_TAGS].join(', ')}
-
-    FOOD_ALLERGEN_TAG_ALLOWED_VALUES:
-    ${[...ALLOWED_FOOD_ALLERGEN_TAGS].join(', ')}
-
-    ai_notes should be 1-2 short lines to help manual review (ingredient assumptions and uncertainty).
-
-    Do not include units in keys or values.
-    If any nutrient is not available, set value to 0.
-    Arrays must contain only allowed values.
-    All numeric values must be numbers (no strings, no units, no markdown, no prose, no extra keys).`;
-
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const data = JSON.parse(response.text());
 
       // Update State
       setProtein(data.protein || 0);
@@ -490,8 +456,8 @@ const CreateFood: React.FC = () => {
     } catch (err) {
       console.error("AI Fetch Error:", err);
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('not found') || message.includes('404')) {
-        alert(`Gemini model \"${geminiModel}\" is not available for this API key/version.`);
+      if (message.toLowerCase().includes('auth') || message.toLowerCase().includes('token') || message.includes('401')) {
+        alert('Sign in to use AI import.');
       } else {
         alert("Failed to fetch nutrition data.");
       }

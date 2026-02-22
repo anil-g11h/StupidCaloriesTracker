@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient';
+
 interface SpoonacularNutrient {
   name?: string;
   amount?: number;
@@ -95,7 +97,11 @@ export interface SpoonacularDailyMealPlan {
   };
 }
 
-const SPOONACULAR_BASE_URL = 'https://api.spoonacular.com';
+interface SpoonacularFunctionResponse<T> {
+  ok?: boolean;
+  message?: string;
+  data?: T;
+}
 
 const parseNumericAmount = (value: unknown): number => {
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -177,47 +183,34 @@ const extractIngredients = (
     .filter((row) => row.name.length > 0);
 };
 
-const buildUrl = (path: string, apiKey: string, params: Record<string, string | number | undefined>) => {
-  const url = new URL(`${SPOONACULAR_BASE_URL}${path}`);
-  url.searchParams.set('apiKey', apiKey);
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === '') return;
-    url.searchParams.set(key, String(value));
+const invokeSpoonacularFunction = async <T>(payload: Record<string, unknown>): Promise<T> => {
+  const { data, error } = await supabase.functions.invoke('spoonacular-recipes', {
+    body: payload
   });
 
-  return url;
-};
+  if (error) throw error;
 
-const ensureSuccess = async (response: Response): Promise<Response> => {
-  if (response.ok) return response;
-
-  let message = `Spoonacular request failed (${response.status})`;
-  try {
-    const body = (await response.json()) as { message?: string };
-    if (body?.message) {
-      message = body.message;
-    }
-  } catch {
-    // no-op
+  const response = (data ?? {}) as SpoonacularFunctionResponse<T>;
+  if (!response.ok) {
+    throw new Error(response.message || 'Spoonacular function request failed');
   }
 
-  throw new Error(message);
+  if (!response.data) {
+    throw new Error('Spoonacular function returned empty payload');
+  }
+
+  return response.data;
 };
 
 export const searchSpoonacularRecipes = async (
-  apiKey: string,
   query: string,
   limit = 8
 ): Promise<SpoonacularRecipeSummary[]> => {
-  const url = buildUrl('/recipes/complexSearch', apiKey, {
+  const payload = await invokeSpoonacularFunction<{ results?: SpoonacularRecipeSearchResult[] }>({
+    action: 'search_recipes',
     query,
-    number: limit,
-    addRecipeNutrition: 'true'
+    limit
   });
-
-  const response = await ensureSuccess(await fetch(url));
-  const payload = (await response.json()) as { results?: SpoonacularRecipeSearchResult[] };
   const rows = Array.isArray(payload.results) ? payload.results : [];
 
   return rows.map((row) => {
@@ -239,15 +232,12 @@ export const searchSpoonacularRecipes = async (
 };
 
 export const getSpoonacularRecipeSummary = async (
-  apiKey: string,
   recipeId: number
 ): Promise<SpoonacularRecipeSummary> => {
-  const url = buildUrl(`/recipes/${recipeId}/information`, apiKey, {
-    includeNutrition: 'true'
+  const row = await invokeSpoonacularFunction<SpoonacularRecipeInfoResponse>({
+    action: 'recipe_summary',
+    recipeId
   });
-
-  const response = await ensureSuccess(await fetch(url));
-  const row = (await response.json()) as SpoonacularRecipeInfoResponse;
   const totals = extractMacroTotals(row.nutrition);
 
   return {
@@ -266,18 +256,14 @@ export const getSpoonacularRecipeSummary = async (
 };
 
 export const generateSpoonacularDailyMealPlan = async (
-  apiKey: string,
   targetCalories: number,
   diet?: string
 ): Promise<SpoonacularDailyMealPlan> => {
-  const url = buildUrl('/mealplanner/generate', apiKey, {
-    timeFrame: 'day',
+  const payload = await invokeSpoonacularFunction<SpoonacularMealPlanResponse>({
+    action: 'daily_meal_plan',
     targetCalories: Math.max(800, Math.round(targetCalories)),
     diet
   });
-
-  const response = await ensureSuccess(await fetch(url));
-  const payload = (await response.json()) as SpoonacularMealPlanResponse;
 
   return {
     meals: (payload.meals || []).map((meal) => ({

@@ -12,9 +12,9 @@ import {
   type SpoonacularMealSuggestion,
   type SpoonacularRecipeSummary
 } from '../../../lib/spoonacular';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from '../../../lib/supabaseClient';
 import { analyzeEaaRatio, type EaaInputItem } from '../../../lib/eaa';
+import { fetchGeminiRecipeIngredients } from '../../../lib/gemini';
 
 const DEFAULT_EAA_TO_PROTEIN_RATIO = 0.35;
 
@@ -66,22 +66,6 @@ interface ShoppingListItem {
   checked: boolean;
   fromMeals: string[];
 }
-
-const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-const spoonacularApiKey = import.meta.env.VITE_SPOONACULAR_API_KEY;
-const geminiModel = 'gemini-2.5-flash';
-
-const parseAiJsonFromText = (rawValue: string): Record<string, unknown> | null => {
-  const jsonMatch = rawValue.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-
-  const candidate = jsonMatch[0];
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    return null;
-  }
-};
 
 const normalizeIngredientName = (value: string) =>
   value
@@ -440,8 +424,6 @@ export default function CreateRecipe() {
 
   const [rankedMealSuggestions, setRankedMealSuggestions] = useState<RankedMealSuggestion[]>([]);
 
-  const hasSpoonacularApiKey = Boolean(spoonacularApiKey);
-
   const saveSpoonacularRecipeAsFood = async (recipe: SpoonacularRecipeSummary) => {
     const now = new Date();
     const foodId = generateId();
@@ -538,30 +520,28 @@ export default function CreateRecipe() {
   const runSpoonacularRecipeSearch = async () => {
     const query = spoonacularQuery.trim();
     if (!query) return alert('Enter a recipe search query first.');
-    if (!hasSpoonacularApiKey || !spoonacularApiKey) {
-      return alert('Missing Spoonacular API key. Set VITE_SPOONACULAR_API_KEY in your .env file.');
-    }
 
     setIsSearchingSpoonacular(true);
     try {
-      const results = await searchSpoonacularRecipes(spoonacularApiKey, query, 8);
+      const results = await searchSpoonacularRecipes(query, 8);
       setSpoonacularResults(results);
     } catch (error) {
       console.error('Failed to search Spoonacular recipes:', error);
-      alert('Failed to fetch recipes from Spoonacular.');
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes('auth') || message.toLowerCase().includes('token') || message.includes('401')) {
+        alert('Sign in to use recipe import.');
+      } else {
+        alert('Failed to fetch recipes from Spoonacular.');
+      }
     } finally {
       setIsSearchingSpoonacular(false);
     }
   };
 
   const importSpoonacularRecipe = async (recipeId: number) => {
-    if (!hasSpoonacularApiKey || !spoonacularApiKey) {
-      return alert('Missing Spoonacular API key. Set VITE_SPOONACULAR_API_KEY in your .env file.');
-    }
-
     setIsImportingSpoonacularId(recipeId);
     try {
-      const recipe = await getSpoonacularRecipeSummary(spoonacularApiKey, recipeId);
+      const recipe = await getSpoonacularRecipeSummary(recipeId);
       const importedFood = await saveSpoonacularRecipeAsFood(recipe);
       setImportedRecipeFoods((prev) => [
         {
@@ -578,28 +558,25 @@ export default function CreateRecipe() {
       }
     } catch (error) {
       console.error('Failed to import Spoonacular recipe:', error);
-      alert('Failed to import recipe from Spoonacular.');
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes('auth') || message.toLowerCase().includes('token') || message.includes('401')) {
+        alert('Sign in to import recipes.');
+      } else {
+        alert('Failed to import recipe from Spoonacular.');
+      }
     } finally {
       setIsImportingSpoonacularId(null);
     }
   };
 
   const generateMealPlanSuggestions = async () => {
-    if (!hasSpoonacularApiKey || !spoonacularApiKey) {
-      return alert('Missing Spoonacular API key. Set VITE_SPOONACULAR_API_KEY in your .env file.');
-    }
-
     setIsGeneratingMealPlan(true);
     try {
-      const nextPlan = await generateSpoonacularDailyMealPlan(
-        spoonacularApiKey,
-        mealPlanTargetCalories,
-        mealPlanDiet
-      );
+      const nextPlan = await generateSpoonacularDailyMealPlan(mealPlanTargetCalories, mealPlanDiet);
       setMealPlan(nextPlan);
 
       const detailedMeals = await Promise.all(
-        nextPlan.meals.map((meal) => getSpoonacularRecipeSummary(spoonacularApiKey, meal.id))
+        nextPlan.meals.map((meal) => getSpoonacularRecipeSummary(meal.id))
       );
 
       const ranked = rankMealSuggestions(nextPlan.meals, detailedMeals, {
@@ -619,17 +596,18 @@ export default function CreateRecipe() {
       );
     } catch (error) {
       console.error('Failed to generate Spoonacular meal plan:', error);
-      alert('Failed to generate meal plan suggestions.');
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes('auth') || message.toLowerCase().includes('token') || message.includes('401')) {
+        alert('Sign in to generate meal suggestions.');
+      } else {
+        alert('Failed to generate meal plan suggestions.');
+      }
     } finally {
       setIsGeneratingMealPlan(false);
     }
   };
 
   const buildShoppingListPlanner = async () => {
-    if (!hasSpoonacularApiKey || !spoonacularApiKey) {
-      return alert('Missing Spoonacular API key. Set VITE_SPOONACULAR_API_KEY in your .env file.');
-    }
-
     let sourceMeals = rankedMealSuggestions;
     if (sourceMeals.length === 0 && !mealPlan?.meals?.length) {
       alert('Generate daily meal suggestions first.');
@@ -642,7 +620,7 @@ export default function CreateRecipe() {
     try {
       if (sourceMeals.length === 0 && mealPlan?.meals?.length) {
         const details = await Promise.all(
-          mealPlan.meals.map((meal) => getSpoonacularRecipeSummary(spoonacularApiKey, meal.id))
+          mealPlan.meals.map((meal) => getSpoonacularRecipeSummary(meal.id))
         );
         sourceMeals = rankMealSuggestions(mealPlan.meals, details, {
           dailyCaloriesTarget: mealPlanTargetCalories,
@@ -659,7 +637,7 @@ export default function CreateRecipe() {
       const needsIngredientRetry = items.length === 0 || sourceMeals.every((meal) => meal.recipe.ingredients.length === 0);
       if (needsIngredientRetry && sourceMeals.length > 0) {
         const refreshedDetails = await Promise.all(
-          sourceMeals.map((meal) => getSpoonacularRecipeSummary(spoonacularApiKey, meal.id))
+          sourceMeals.map((meal) => getSpoonacularRecipeSummary(meal.id))
         );
 
         sourceMeals = rankMealSuggestions(sourceMeals, refreshedDetails, {
@@ -740,42 +718,11 @@ export default function CreateRecipe() {
 
   const fetchRecipeIngredients = async () => {
     if (!recipeName.trim()) return alert('Please enter a recipe name first');
-    if (!geminiApiKey) {
-      return alert('Missing Gemini API key. Set VITE_GEMINI_API_KEY in your .env file.');
-    }
 
     setIsFetchingAiRecipe(true);
     try {
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({
-        model: geminiModel,
-        generationConfig: { responseMimeType: 'application/json' }
-      });
-
-      const prompt = `Generate a clean recipe ingredient list for "${recipeName}".
-Return ONLY raw JSON object with this exact shape:
-{
-  "recipe_name": "string",
-  "ingredients": [
-    { "name": "string", "amount": number, "unit": "string" }
-  ]
-}
-
-Rules:
-- Keep ingredient names generic and short.
-- amount must be numeric and > 0.
-- unit should be practical (g, ml, tsp, tbsp, cup, piece, serving).
-- No markdown, no prose, no extra keys.`;
-
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-
-      const parsed = parseAiJsonFromText(response.text());
-      if (!parsed) {
-        throw new Error('Could not parse recipe JSON from Gemini response.');
-      }
-
-      const aiIngredientsRaw = Array.isArray(parsed.ingredients) ? parsed.ingredients : [];
+      const payload = await fetchGeminiRecipeIngredients({ recipeName });
+      const aiIngredientsRaw = Array.isArray(payload.ingredients) ? payload.ingredients : [];
       const aiIngredients: AiRecipeIngredient[] = aiIngredientsRaw
         .map((item) => {
           const record = (item || {}) as Record<string, unknown>;
@@ -826,7 +773,12 @@ Rules:
       }
     } catch (error) {
       console.error('Failed to fetch recipe ingredients:', error);
-      alert('Failed to fetch recipe ingredients from Gemini.');
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes('auth') || message.toLowerCase().includes('token') || message.includes('401')) {
+        alert('Sign in to use AI recipe import.');
+      } else {
+        alert('Failed to fetch recipe ingredients from Gemini.');
+      }
     } finally {
       setIsFetchingAiRecipe(false);
     }
@@ -905,11 +857,6 @@ Rules:
 
       <div className="mb-4 rounded-xl border border-border-subtle bg-card p-3 space-y-3">
         <h2 className="text-sm font-bold text-text-main">Spoonacular Recipe Nutrition Logging</h2>
-        {!hasSpoonacularApiKey && (
-          <p className="text-xs text-text-muted">
-            Add VITE_SPOONACULAR_API_KEY to use recipe import and meal suggestions.
-          </p>
-        )}
 
         <div className="flex gap-2">
           <input

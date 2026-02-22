@@ -50,7 +50,6 @@ Configure the environment variables to connect your app to Supabase.
     ```env
     VITE_SUPABASE_URL=your_supabase_project_url
     VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-    VITE_SPOONACULAR_API_KEY=your_spoonacular_api_key
     ```
     You can find Supabase values in your Supabase project settings under **API**.
 
@@ -58,6 +57,10 @@ Configure the environment variables to connect your app to Supabase.
     ```bash
     supabase secrets set GEMINI_API_KEY=your_gemini_api_key
     supabase secrets set GEMINI_MODEL=gemini-2.5-flash
+    # Optional rate limiting knobs (defaults shown)
+    supabase secrets set AI_RATE_LIMIT_MAX_REQUESTS=30
+    supabase secrets set AI_RATE_LIMIT_WINDOW_MINUTES=60
+    supabase secrets set AI_RATE_LIMIT_RETENTION_DAYS=7
     ```
 
 4.  Deploy the function used by the app:
@@ -65,7 +68,13 @@ Configure the environment variables to connect your app to Supabase.
     supabase functions deploy gemini-food-nutrition
     ```
 
-5.  Deploy admin maintenance function (optional, for global cleanup actions from Profile > Admin Actions):
+5.  Configure Spoonacular secret server-side and deploy proxy function:
+    ```bash
+    supabase secrets set SPOONACULAR_API_KEY=your_spoonacular_api_key
+    supabase functions deploy spoonacular-recipes
+    ```
+
+6.  Deploy admin maintenance function (optional, for global cleanup actions from Profile > Admin Actions):
     ```bash
     supabase functions deploy admin-maintenance --no-verify-jwt
     supabase secrets set ADMIN_EMAILS=admin1@example.com,admin2@example.com
@@ -84,7 +93,7 @@ This app now includes Spoonacular-powered helpers in **Create Recipe**:
 - Search and import recipe nutrition as loggable recipe foods
 - Generate basic daily meal-plan suggestions (with optional `diet` filter)
 
-Set `VITE_SPOONACULAR_API_KEY` in `.env` to enable these features.
+Set `SPOONACULAR_API_KEY` as a Supabase Edge Function secret to enable these features.
 
 ## Running the App
 
