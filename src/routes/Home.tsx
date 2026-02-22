@@ -75,7 +75,6 @@ export default function Home() {
   const [weightGoalDraft, setWeightGoalDraft] = useState('');
   const [weightSliderKg, setWeightSliderKg] = useState<number | null>(null);
   const [waterForm, setWaterForm] = useState({
-    date: today,
     value: ''
   });
   const [waterQuickAddFeedback, setWaterQuickAddFeedback] = useState('');
@@ -477,7 +476,7 @@ export default function Home() {
     setWeightGoalModalOpen(false);
   };
 
-  const saveWaterMetric = async (valueInput: number, dateInput?: string) => {
+  const saveWaterMetric = async (valueInput: number) => {
     const value = Number(valueInput);
     if (!Number.isFinite(value) || value <= 0) {
       alert('Enter a valid water intake');
@@ -488,7 +487,7 @@ export default function Home() {
       const metric: BodyMetric = {
         id: generateId(),
         user_id: currentUserId,
-        date: dateInput || waterForm.date || today,
+        date: today,
         type: 'water',
         value: Math.round(value),
         unit: 'ml',
@@ -514,7 +513,7 @@ export default function Home() {
   };
 
   const addWaterQuickOption = async (amount: number) => {
-    const didSave = await saveWaterMetric(amount, waterForm.date || today);
+    const didSave = await saveWaterMetric(amount);
     if (!didSave) return;
 
     setWaterQuickAddFeedback(`Added ${amount} ml`);
@@ -821,21 +820,12 @@ export default function Home() {
 
             <form onSubmit={addWater} className="grid grid-cols-3 gap-2 mb-3">
               <input
-                type="date"
-                value={waterForm.date}
-                onChange={(e) => setWaterForm((prev) => ({ ...prev, date: e.target.value }))}
-                className="col-span-2 p-2.5 rounded-xl border border-border-subtle bg-surface text-text-main text-sm"
-              />
-              <div className="col-span-1 p-2.5 rounded-xl border border-border-subtle bg-surface text-text-muted text-sm flex items-center justify-center font-medium">
-                ml
-              </div>
-              <input
                 type="number"
                 step="1"
                 min="0"
                 value={waterForm.value}
                 onChange={(e) => setWaterForm((prev) => ({ ...prev, value: e.target.value }))}
-                placeholder="Water"
+                placeholder="Water (ml)"
                 className="col-span-2 p-2.5 rounded-xl border border-border-subtle bg-surface text-text-main text-sm"
               />
               <button

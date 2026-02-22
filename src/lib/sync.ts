@@ -5,6 +5,15 @@ import Dexie from 'dexie';
 const SYNC_INTERVAL_MS = 30000; // 30 seconds
 const LAST_SYNCED_KEY_BASE = 'stupid_calorie_tracker_last_synced';
 
+interface SyncTableConfig {
+    dexie: string;
+    supabase: string;
+    dateField: string;
+    fallbackDateField?: string;
+    public?: boolean;
+    select?: string;
+}
+
 export class SyncManager {
   private syncInterval: ReturnType<typeof setInterval> | null = null;
   private isSyncing = false;
@@ -55,37 +64,86 @@ export class SyncManager {
         return normalized === '' || normalized === 'null' || normalized === 'undefined';
     }
 
-    private async reconcileDeletedFoods() {
+    private async fetchRemoteIds(config: SyncTableConfig): Promise<Set<string> | null> {
         const PAGE_SIZE = 500;
-        const remoteFoodIds = new Set<string>();
+        const remoteIds = new Set<string>();
         let page = 0;
 
         while (true) {
             const from = page * PAGE_SIZE;
             const to = from + PAGE_SIZE - 1;
             const { data, error } = await supabase
-                .from('foods')
+                .from(config.supabase)
                 .select('id')
                 .order('id', { ascending: true })
                 .range(from, to);
 
-            if (error) throw error;
+            if (error) {
+                if (this.isMissingRelationError(error)) {
+                    console.warn(`[SyncManager] Skipping delete reconciliation for missing remote table ${config.supabase}: ${error.message}`);
+                    return null;
+                }
+                throw error;
+            }
 
             const rows = data ?? [];
             for (const row of rows) {
-                if (row?.id) remoteFoodIds.add(row.id);
+                const id = row?.id;
+                if (typeof id === 'string' && id) {
+                    remoteIds.add(id);
+                }
             }
 
             if (rows.length < PAGE_SIZE) break;
             page += 1;
         }
 
-        const localSyncedFoodIds = (await db.foods.where('synced').equals(1).primaryKeys()) as string[];
-        const idsToDelete = localSyncedFoodIds.filter((id) => !remoteFoodIds.has(id));
+        return remoteIds;
+    }
 
-        if (idsToDelete.length > 0) {
-            await db.foods.bulkDelete(idsToDelete);
-            console.log(`[SyncManager] Removed ${idsToDelete.length} locally cached foods deleted remotely`);
+    private async getLocalSyncedPrimaryKeys(tableName: string): Promise<Array<string | number>> {
+        const table = db.table(tableName);
+        const hasSyncedIndex = ((table as any)?.schema?.indexes ?? []).some((index: any) => index?.name === 'synced');
+
+        if (hasSyncedIndex) {
+            return (await table.where('synced').equals(1).primaryKeys()) as Array<string | number>;
+        }
+
+        return (await table
+            .toCollection()
+            .filter((row: any) => row?.synced === 1)
+            .primaryKeys()) as Array<string | number>;
+    }
+
+    private async reconcileDeletedRows(tables: SyncTableConfig[], session: any) {
+        for (const config of tables) {
+            if (!session?.user && !config.public) {
+                continue;
+            }
+
+            try {
+                const remoteIds = await this.fetchRemoteIds(config);
+                if (!remoteIds) continue;
+
+                if (config.dexie === 'settings') {
+                    const localSettings = await db.settings.get('local-settings');
+                    if (localSettings?.synced === 1 && remoteIds.size === 0) {
+                        await db.settings.delete('local-settings');
+                        console.log('[SyncManager] Removed local settings deleted remotely');
+                    }
+                    continue;
+                }
+
+                const localSyncedIds = await this.getLocalSyncedPrimaryKeys(config.dexie);
+                const idsToDelete = localSyncedIds.filter((id) => !remoteIds.has(String(id)));
+
+                if (idsToDelete.length > 0) {
+                    await db.table(config.dexie).bulkDelete(idsToDelete as any[]);
+                    console.log(`[SyncManager] Removed ${idsToDelete.length} locally cached ${config.dexie} rows deleted remotely`);
+                }
+            } catch (error) {
+                console.warn(`[SyncManager] Delete reconciliation skipped for ${config.dexie}:`, error);
+            }
         }
     }
 
@@ -379,6 +437,35 @@ export class SyncManager {
         return output;
     }
 
+    private async resolveForbiddenFoodUpdate(foodId: string, sessionUserId?: string | null): Promise<boolean> {
+        const { data, error } = await supabase
+            .from('foods')
+            .select('*')
+            .eq('id', foodId)
+            .maybeSingle();
+
+        if (error) {
+            console.warn('[SyncManager] Failed to inspect forbidden food update target', error);
+            return false;
+        }
+
+        if (!data) {
+            await db.foods.delete(foodId);
+            console.log('[SyncManager] Removed local food missing remotely after forbidden update attempt', foodId);
+            return true;
+        }
+
+        const remoteOwner = data.user_id ?? null;
+        const isOwnedByCurrentUser = Boolean(sessionUserId) && remoteOwner === sessionUserId;
+        if (isOwnedByCurrentUser) {
+            return false;
+        }
+
+        await db.foods.put({ ...data, synced: 1 });
+        console.log('[SyncManager] Skipping update for non-owned/public food (RLS-protected)', foodId);
+        return true;
+    }
+
   private async processQueueItem(item: SyncQueue, session: any) {
     const { table, action, data } = item;
         const tablesWithUserId = new Set([
@@ -453,6 +540,21 @@ export class SyncManager {
             }
         }
 
+        if (table === 'foods' && action === 'update' && payload.id) {
+            const localFood = await db.foods.get(payload.id);
+            const localOwner = localFood?.user_id ?? null;
+            const isOwnedByCurrentUser = Boolean(session?.user?.id) && localOwner === session.user.id;
+            if (localFood && !isOwnedByCurrentUser) {
+                console.log('[SyncManager] Skipping update for non-owned/public food (RLS-protected)', payload.id);
+                try {
+                    await db.foods.update(payload.id, { synced: 1 });
+                } catch (markError) {
+                    console.warn('[SyncManager] Failed to mark non-owned/public food as synced after skip', markError);
+                }
+                return;
+            }
+        }
+
         if (
             table === 'workout_log_entries' &&
             action === 'create' &&
@@ -510,7 +612,10 @@ export class SyncManager {
             payload.meal_type = await this.normalizeDailyLogMealType(payload.meal_type);
         }
     
-    console.log(`[SyncManager] Processing ${action} for ${supabaseTable} with user ${payload.user_id}`, payload);
+    const actorLabel = supportsUserId
+        ? `user ${payload.user_id ?? 'unknown'}`
+        : `id ${payload.id ?? 'unknown'}`;
+    console.log(`[SyncManager] Processing ${action} for ${supabaseTable} (${actorLabel})`, payload);
 
         const shouldRetryWithoutUserId = (error: any) => {
       return (
@@ -583,6 +688,12 @@ export class SyncManager {
     } else if (action === 'update') {
         if (!payload.id) throw new Error('No ID for update');
                 const error = await executeUpdate();
+        if (table === 'foods' && error?.code === '42501') {
+            const handled = await this.resolveForbiddenFoodUpdate(payload.id, session?.user?.id ?? null);
+            if (handled) {
+                return;
+            }
+        }
         if (error) throw error;
     }
 
@@ -620,17 +731,7 @@ export class SyncManager {
     let hasChanges = false;
     let hadPullErrors = false;
 
-    // Tables to sync
-    interface TableConfig {
-        dexie: string;
-        supabase: string;
-        dateField: string;
-        fallbackDateField?: string;
-        public?: boolean;
-        select?: string; // Limit fields if needed
-    }
-
-    const tables: TableConfig[] = [
+    const tables: SyncTableConfig[] = [
         { dexie: 'profiles', supabase: 'profiles', dateField: 'updated_at' },
         { dexie: 'foods', supabase: 'foods', dateField: 'updated_at', public: true },
         { dexie: 'food_ingredients', supabase: 'food_ingredients', dateField: 'created_at', public: true },
@@ -776,7 +877,7 @@ export class SyncManager {
         return;
     }
 
-    await this.reconcileDeletedFoods();
+    await this.reconcileDeletedRows(tables, session);
 
     if (hasChanges && maxTimestamp > lastSyncedDate) {
         localStorage.setItem(lastSyncedKey, maxTimestamp); 

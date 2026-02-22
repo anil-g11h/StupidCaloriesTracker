@@ -18,6 +18,7 @@ import {
   type MealTargetMode
 } from './mealPlanning';
 import { supabase } from '../../lib/supabaseClient';
+import { syncManager } from '../../lib/sync';
 
 export type ReminderKey = 'food' | 'water' | 'workout' | 'walk' | 'weight' | 'medicine';
 export type OpenProfileSection = 'nutrition' | 'dietary' | 'meals' | 'reminders' | 'admin' | null;
@@ -145,6 +146,12 @@ export function useProfileSettings() {
   const [dietaryForm, setDietaryForm] = useState<DietaryPreferences>(createDefaultDietaryPreferences());
   const [customAllergyInput, setCustomAllergyInput] = useState('');
 
+  const settingsRow = useLiveQuery(
+    async () => settingsTable.get(SETTINGS_ID),
+    [settingsTable],
+    undefined as LocalSettingsRow | undefined
+  );
+
   const profileRow = useLiveQuery(
     async () => {
       const userId = session?.user?.id;
@@ -181,6 +188,25 @@ export function useProfileSettings() {
 
     void loadSettings();
   }, [settingsTable]);
+
+  useEffect(() => {
+    if (!settingsRow) return;
+
+    const normalized = normalizeSettings(settingsRow);
+    setForm((prev) => {
+      if (
+        prev.updated_at === normalized.updated_at &&
+        prev.nutrition.calorieBudget === normalized.nutrition.calorieBudget &&
+        prev.nutrition.proteinPercent === normalized.nutrition.proteinPercent &&
+        prev.nutrition.carbPercent === normalized.nutrition.carbPercent &&
+        prev.nutrition.fatPercent === normalized.nutrition.fatPercent
+      ) {
+        return prev;
+      }
+      return normalized;
+    });
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
+  }, [settingsRow]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
@@ -488,6 +514,9 @@ export function useProfileSettings() {
       };
 
       await db.profiles.put(upsertProfile);
+      if (navigator.onLine) {
+        await syncManager.sync();
+      }
       alert('Settings saved');
     } catch (error) {
       console.error(error);

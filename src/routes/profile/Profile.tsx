@@ -234,11 +234,11 @@ export default function ProfileSettings() {
                 setAdminStatus(`Cleared ${removed} queued item(s) locally.`);
               });
             }}
-            onResetCursorAndSync={() => {
-              void runAdminAction('reset-cursor-sync', async () => {
+            onForceFullSyncAndReconcile={() => {
+              void runAdminAction('force-full-sync-reconcile', async () => {
                 await resetLocalSyncCursor();
                 await syncManager.sync();
-                setAdminStatus('Reset local sync cursor and triggered a full pull sync.');
+                setAdminStatus('Forced full sync and delete reconciliation for this device.');
               });
             }}
             onResetLocalDb={() => {

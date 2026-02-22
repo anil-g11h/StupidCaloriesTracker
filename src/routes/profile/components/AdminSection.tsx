@@ -18,7 +18,7 @@ interface AdminSectionProps {
   onRefreshSummary: () => void;
   onClearFailedQueue: () => void;
   onClearAllQueue: () => void;
-  onResetCursorAndSync: () => void;
+  onForceFullSyncAndReconcile: () => void;
   onResetLocalDb: () => void;
   onRunGlobalAction: (action: GlobalAdminAction) => void;
   statusMessage: string | null;
@@ -34,7 +34,7 @@ export function AdminSection({
   onRefreshSummary,
   onClearFailedQueue,
   onClearAllQueue,
-  onResetCursorAndSync,
+  onForceFullSyncAndReconcile,
   onResetLocalDb,
   onRunGlobalAction,
   statusMessage
@@ -82,11 +82,11 @@ export function AdminSection({
           </button>
           <button
             type="button"
-            onClick={onResetCursorAndSync}
+            onClick={onForceFullSyncAndReconcile}
             disabled={isBusy}
             className="w-full py-2 rounded-lg border border-border-subtle bg-card text-text-main text-sm font-semibold disabled:opacity-60"
           >
-            Reset Sync Cursor + Full Pull (local)
+            Force Full Sync + Delete Reconcile Now (local)
           </button>
           <button
             type="button"
