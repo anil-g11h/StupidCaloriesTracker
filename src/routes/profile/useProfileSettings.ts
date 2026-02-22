@@ -20,7 +20,7 @@ import {
 import { supabase } from '../../lib/supabaseClient';
 
 export type ReminderKey = 'food' | 'water' | 'workout' | 'walk' | 'weight' | 'medicine';
-export type OpenProfileSection = 'nutrition' | 'dietary' | 'meals' | 'reminders' | null;
+export type OpenProfileSection = 'nutrition' | 'dietary' | 'meals' | 'reminders' | 'admin' | null;
 
 interface ReminderSetting {
   enabled: boolean;

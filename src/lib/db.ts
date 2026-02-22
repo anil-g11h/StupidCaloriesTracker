@@ -90,6 +90,9 @@ export interface SyncQueue {
   action: 'create' | 'update' | 'delete';
   data: any;
   created_at: number;
+  attempt_count?: number;
+  last_attempt_at?: number;
+  last_error?: string;
 }
 
 export type MealTargetMode = 'percent' | 'calories';

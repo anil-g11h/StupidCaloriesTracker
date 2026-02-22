@@ -9,6 +9,46 @@ export class SyncManager {
   private syncInterval: ReturnType<typeof setInterval> | null = null;
   private isSyncing = false;
 
+    async getQueueSummary() {
+        const queue = await db.sync_queue.toArray();
+        const total = queue.length;
+        const failed = queue.filter((item) => (item.attempt_count ?? 0) >= 3).length;
+        const pending = total - failed;
+        const byTable = queue.reduce<Record<string, number>>((acc, item) => {
+            acc[item.table] = (acc[item.table] ?? 0) + 1;
+            return acc;
+        }, {});
+
+        return { total, pending, failed, byTable };
+    }
+
+    async clearFailedQueueItems(minAttempts = 3) {
+        const queue = await db.sync_queue.toArray();
+        const failedIds = queue
+            .filter((item) => (item.attempt_count ?? 0) >= minAttempts)
+            .map((item) => item.id)
+            .filter((id): id is number => typeof id === 'number');
+
+        if (failedIds.length === 0) return 0;
+        await db.sync_queue.bulkDelete(failedIds);
+        return failedIds.length;
+    }
+
+    async clearAllQueuedChanges() {
+        const count = await db.sync_queue.count();
+        if (count > 0) {
+            await db.sync_queue.clear();
+        }
+        return count;
+    }
+
+    async resetSyncCursorForCurrentUser() {
+        const { data: { session } } = await supabase.auth.getSession();
+        const key = this.getLastSyncedKey(session);
+        localStorage.removeItem(key);
+        return key;
+    }
+
     private isInvalidUuidLiteral(value: unknown): boolean {
         if (typeof value !== 'string') return false;
         const normalized = value.trim().toLowerCase();
@@ -222,6 +262,14 @@ export class SyncManager {
         }
       } catch (error) {
         console.error('Failed to process queue item:', item, error);
+                                if (item.id) {
+                                        const prevAttempts = item.attempt_count ?? 0;
+                                        await db.sync_queue.update(item.id, {
+                                                attempt_count: prevAttempts + 1,
+                                                last_attempt_at: Date.now(),
+                                                last_error: error instanceof Error ? error.message : String(error ?? 'Unknown error')
+                                        });
+                                }
                 failedCount += 1;
       }
     }
@@ -374,6 +422,24 @@ export class SyncManager {
     const { synced, ...rawPayload } = data;
     let payload = this.normalizeDottedPayloadKeys(rawPayload as Record<string, any>);
 
+        // Permanent behavior: shared/public exercise definitions (user_id null)
+        // are reference data and should not be mutated by regular client sync.
+        // If product requirements change, adjust this guard and corresponding
+        // RLS/server-admin pathways together.
+        if (table === 'workout_exercises_def' && action === 'update' && payload.id) {
+            const localExercise = await db.workout_exercises_def.get(payload.id);
+            const isSharedExercise = !localExercise?.user_id;
+            if (isSharedExercise) {
+                console.log('[SyncManager] Skipping update for shared workout exercise (RLS-protected)', payload.id);
+                try {
+                    await db.workout_exercises_def.update(payload.id, { synced: 1 });
+                } catch (markError) {
+                    console.warn('[SyncManager] Failed to mark shared workout exercise as synced after skip', markError);
+                }
+                return;
+            }
+        }
+
         if (
             table === 'workout_log_entries' &&
             action === 'create' &&
@@ -398,7 +464,11 @@ export class SyncManager {
     if (session?.user?.id && supportsUserId) {
          if (strictUserOwnedTables.has(table)) {
              payload.user_id = session.user.id;
-         } else if (payload.user_id === 'local-user' || payload.user_id === 'current-user' || !payload.user_id) {
+         } else if (
+            payload.user_id === 'local-user' ||
+            payload.user_id === 'current-user' ||
+            (!payload.user_id && !(table === 'workout_exercises_def' && action === 'update'))
+         ) {
              payload.user_id = session.user.id;
          }
          // Also ensure ownership for ownable items

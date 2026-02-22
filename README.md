@@ -58,6 +58,16 @@ Configure the environment variables to connect your app to Supabase.
     supabase functions deploy gemini-food-nutrition
     ```
 
+5.  Deploy admin maintenance function (optional, for global cleanup actions from Profile > Admin Actions):
+    ```bash
+    supabase functions deploy admin-maintenance --no-verify-jwt
+    supabase secrets set ADMIN_EMAILS=admin1@example.com,admin2@example.com
+    # Optional extra guard (if set, UI token field must match this value)
+    supabase secrets set ADMIN_MAINTENANCE_TOKEN=your_strong_token
+    ```
+
+    `admin-maintenance` is called from the browser, so JWT verification is handled inside the function itself. If JWT verification is enabled at the gateway, CORS preflight may fail before the function runs.
+
 Do not expose Gemini keys in `VITE_*` variables for static hosting.
 
 ### 4. Spoonacular (Recipe Nutrition + Meal Suggestions)
@@ -97,6 +107,25 @@ The application is built with an "Offline-First" architecture. Here's how it wor
 -   **Sync Queue:** When you make changes while offline (e.g., adding a log), the operation is saved to a local synchronization queue.
 -   **Automatic Sync:** The app listens for network connectivity. When the device comes back online, the `SyncManager` processes the queue, pushing local changes to Supabase and pulling any updates from the server.
 -   **Conflict Resolution:** The system handles basic synchronization to keep the client and server in the same state.
+
+## Admin Maintenance Actions
+
+-   In **Profile Settings → Admin Actions**, local cleanup tools are available for the current device:
+    - clear failed sync queue items (3+ attempts)
+    - clear all queued sync items
+    - reset sync cursor and force full pull
+    - reset local DB + storage
+-   Global cleanup tools run through `admin-maintenance` and operate across **all accounts/devices** server-side.
+-   Only users whose email is listed in `ADMIN_EMAILS` can run global actions.
+-   Note: failed sync queue data is local (IndexedDB), so global cleanup does not directly edit each device's queue.
+
+## Sync Behavior Notes
+
+-   `workout_exercises_def` rows with `user_id = null` are treated as shared/public reference data.
+-   Client sync intentionally **does not push updates** to shared/public exercise rows. Those updates fail RLS by design and would otherwise stay in retry loops.
+-   When such a local update is detected, sync skips the remote write and marks the local row as synced to keep the queue healthy.
+-   If shared/public exercise data must be changed globally, use admin/server paths (Edge Function or SQL migration), not normal client sync.
+-   Implementation reference: `SyncManager.processQueueItem` guard in `src/lib/sync.ts`.
 
 ## Future AI Integration
 
