@@ -775,6 +775,12 @@ export default function CreateRecipe() {
       const message = error instanceof Error ? error.message : String(error);
       if (message.toLowerCase().includes('auth') || message.toLowerCase().includes('token') || message.includes('401')) {
         alert('Sign in to use AI recipe import.');
+      } else if (
+        message.toLowerCase().includes('temporarily unavailable') ||
+        message.toLowerCase().includes('missing required env') ||
+        message.toLowerCase().includes('gemini_api_key')
+      ) {
+        alert('AI recipe import is temporarily unavailable. Please try again later.');
       } else {
         alert('Failed to fetch recipe ingredients from Gemini.');
       }

@@ -282,7 +282,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    const geminiApiKey = getEnv('GEMINI_API_KEY');
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')?.trim();
+    if (!geminiApiKey) {
+      return json(503, {
+        ok: false,
+        message: 'AI service is temporarily unavailable. Please try again later.'
+      });
+    }
     const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.5-flash';
 
     const genAI = new GoogleGenerativeAI(geminiApiKey);

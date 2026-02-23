@@ -475,6 +475,12 @@ const CreateFood: React.FC = () => {
       const message = err instanceof Error ? err.message : String(err);
       if (message.toLowerCase().includes('auth') || message.toLowerCase().includes('token') || message.includes('401')) {
         alert('Sign in to use AI import.');
+      } else if (
+        message.toLowerCase().includes('temporarily unavailable') ||
+        message.toLowerCase().includes('missing required env') ||
+        message.toLowerCase().includes('gemini_api_key')
+      ) {
+        alert('AI import is temporarily unavailable. Please try again later.');
       } else {
         alert("Failed to fetch nutrition data.");
       }
