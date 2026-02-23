@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
-type GeminiAction = 'nutrition_profile' | 'recipe_ingredients';
+type GeminiAction = 'nutrition_profile' | 'recipe_ingredients' | 'daily_coach';
 
 const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 30;
 const DEFAULT_RATE_LIMIT_WINDOW_MINUTES = 60;
@@ -140,7 +140,50 @@ function parseAiJsonFromText(rawValue: string): Record<string, unknown> | null {
 }
 
 function isGeminiAction(value: unknown): value is GeminiAction {
-  return value === 'nutrition_profile' || value === 'recipe_ingredients';
+  return value === 'nutrition_profile' || value === 'recipe_ingredients' || value === 'daily_coach';
+}
+
+function buildDailyCoachPrompt(input: {
+  date: string;
+  caloriesGoal: number;
+  caloriesConsumed: number;
+  proteinGoal: number;
+  proteinConsumed: number;
+  carbsGoal: number;
+  carbsConsumed: number;
+  fatGoal: number;
+  fatConsumed: number;
+  waterGoal: number;
+  waterToday: number;
+  sleepGoal: number;
+  sleepToday: number;
+  workoutsToday: number;
+  workoutMinutesWeek: number;
+  todayLogsCount: number;
+  dietTags: string[];
+  allergies: string[];
+  mealPattern: string;
+  goalFocus: string;
+}): string {
+  return `You are a practical nutrition and recovery coach.
+Generate one concise daily suggestion for the user based on this context:
+${JSON.stringify(input)}
+
+Return ONLY raw JSON with exact keys:
+{
+  "suggestion_title": "string",
+  "suggestion_text": "string",
+  "warning_text": "string",
+  "food_or_recipe": "string",
+  "why": ["string", "string", "string"]
+}
+
+Rules:
+- Keep each text short and actionable.
+- warning_text can be empty string when no warning is needed.
+- food_or_recipe must respect dietTags/allergies.
+- why must include 2-3 short bullets derived from provided numbers.
+- No markdown, no prose outside JSON, no extra keys.`;
 }
 
 function buildNutritionPrompt(input: { name: string; servingSize: number; servingUnit: string }): string {
@@ -307,6 +350,66 @@ Deno.serve(async (req) => {
       if (!servingUnit) return json(400, { ok: false, message: 'Missing servingUnit' });
 
       const prompt = buildNutritionPrompt({ name, servingSize, servingUnit });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const parsed = parseAiJsonFromText(response.text());
+
+      if (!parsed) {
+        return json(502, { ok: false, message: 'Gemini returned invalid JSON payload' });
+      }
+
+      return json(200, {
+        ok: true,
+        action,
+        data: parsed,
+        rate_limit: {
+          limit: rateLimit.limit,
+          remaining: rateLimit.remaining,
+          window_minutes: rateLimit.windowMinutes,
+          retry_after_seconds: 0
+        }
+      }, {
+        'X-RateLimit-Limit': String(rateLimit.limit),
+        'X-RateLimit-Remaining': String(rateLimit.remaining),
+        'X-RateLimit-Window-Minutes': String(rateLimit.windowMinutes)
+      });
+    }
+
+    const recipeName = String(body?.recipeName || '').trim();
+    if (action === 'daily_coach') {
+      const date = String(body?.date || '').trim();
+      if (!date) {
+        return json(400, { ok: false, message: 'Missing date' });
+      }
+
+      const toFiniteNumber = (value: unknown) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+
+      const prompt = buildDailyCoachPrompt({
+        date,
+        caloriesGoal: toFiniteNumber(body?.caloriesGoal),
+        caloriesConsumed: toFiniteNumber(body?.caloriesConsumed),
+        proteinGoal: toFiniteNumber(body?.proteinGoal),
+        proteinConsumed: toFiniteNumber(body?.proteinConsumed),
+        carbsGoal: toFiniteNumber(body?.carbsGoal),
+        carbsConsumed: toFiniteNumber(body?.carbsConsumed),
+        fatGoal: toFiniteNumber(body?.fatGoal),
+        fatConsumed: toFiniteNumber(body?.fatConsumed),
+        waterGoal: toFiniteNumber(body?.waterGoal),
+        waterToday: toFiniteNumber(body?.waterToday),
+        sleepGoal: toFiniteNumber(body?.sleepGoal),
+        sleepToday: toFiniteNumber(body?.sleepToday),
+        workoutsToday: toFiniteNumber(body?.workoutsToday),
+        workoutMinutesWeek: toFiniteNumber(body?.workoutMinutesWeek),
+        todayLogsCount: toFiniteNumber(body?.todayLogsCount),
+        dietTags: Array.isArray(body?.dietTags) ? body.dietTags.map((value: unknown) => String(value)) : [],
+        allergies: Array.isArray(body?.allergies) ? body.allergies.map((value: unknown) => String(value)) : [],
+        mealPattern: String(body?.mealPattern || '').trim(),
+        goalFocus: String(body?.goalFocus || '').trim()
+      });
+
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const parsed = parseAiJsonFromText(response.text());

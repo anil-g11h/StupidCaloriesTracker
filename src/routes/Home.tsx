@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useSearchParams } from 'react-router-dom';
-import { db, type BodyMetric, type Food, type UserSettings } from '../lib/db';
+import { db, type BodyMetric, type Food, type Profile, type UserSettings } from '../lib/db';
 import { generateId } from '../lib';
+import { fetchGeminiDailyCoach, type GeminiDailyCoachPayload } from '../lib/gemini';
 import { supabase } from '../lib/supabaseClient';
 import { useStackNavigation } from '../lib/useStackNavigation';
 import RouteHeader from '../lib/components/RouteHeader';
@@ -97,6 +98,9 @@ export default function Home() {
     date: today,
     value: ''
   });
+  const [coachStatus, setCoachStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [coachSuggestion, setCoachSuggestion] = useState<GeminiDailyCoachPayload | null>(null);
+  const [coachError, setCoachError] = useState('');
 
   const recentWeight = useLiveQuery(
     async () => {
@@ -156,10 +160,11 @@ export default function Home() {
   );
 
   const data = useLiveQuery(async () => {
-    const [todayLogs, settings, workouts] = await Promise.all([
+    const [todayLogs, settings, workouts, profile] = await Promise.all([
       db.logs.where('date').equals(today).toArray(),
       db.settings.get(SETTINGS_ID as string) as Promise<SettingsRow | undefined>,
-      db.workouts.toArray()
+      db.workouts.toArray(),
+      db.profiles.get(currentUserId) as Promise<Profile | undefined>
     ]);
 
     const foodIds = [...new Set(todayLogs.map((log) => log.food_id))];
@@ -191,6 +196,7 @@ export default function Home() {
     const todayWorkoutCount = workouts.filter((workout) => workout.start_time.startsWith(today)).length;
 
     return {
+      profile,
       settings,
       todayLogsCount: todayLogs.length,
       calorieTotals,
@@ -317,6 +323,10 @@ export default function Home() {
     goalWeightKg !== null && sliderMaxKg > sliderMinKg
       ? Math.min(100, Math.max(0, ((goalWeightKg - sliderMinKg) / (sliderMaxKg - sliderMinKg)) * 100))
       : null;
+  const dietTags = data?.profile?.diet_tags ?? [];
+  const allergies = [...(data?.profile?.allergies ?? []), ...(data?.profile?.custom_allergies ?? [])];
+  const mealPattern = data?.profile?.meal_pattern ?? '';
+  const goalFocus = data?.profile?.goal_focus ?? '';
 
   useEffect(() => {
     if (previousWeightKg !== null) {
@@ -580,6 +590,57 @@ export default function Home() {
     transition.finished.finally(() => {
       document.documentElement.classList.remove(`transition-${direction}`);
     });
+  };
+
+  const generateCoachSuggestion = async () => {
+    if (coachStatus === 'loading') return;
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setCoachError('You appear to be offline. Connect to the internet and try again.');
+      setCoachStatus('error');
+      return;
+    }
+
+    try {
+      setCoachStatus('loading');
+      setCoachError('');
+
+      const suggestion = await fetchGeminiDailyCoach({
+        date: today,
+        caloriesGoal: Math.round(calorieGoal),
+        caloriesConsumed,
+        proteinGoal,
+        proteinConsumed,
+        carbsGoal,
+        carbsConsumed,
+        fatGoal,
+        fatConsumed,
+        waterGoal,
+        waterToday: Math.round(todayWater),
+        sleepGoal,
+        sleepToday: Math.round(todaySleep * 10) / 10,
+        workoutsToday: data?.todayWorkoutCount ?? 0,
+        workoutMinutesWeek: data?.thisWeekMinutes ?? 0,
+        todayLogsCount: data?.todayLogsCount ?? 0,
+        dietTags,
+        allergies,
+        mealPattern,
+        goalFocus
+      });
+
+      setCoachSuggestion({
+        ...suggestion,
+        why: (suggestion.why ?? []).slice(0, 3)
+      });
+      setCoachStatus('ready');
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : 'Failed to load AI suggestion';
+      const message = /invalid action/i.test(rawMessage)
+        ? 'AI coach is not deployed on the server yet. Deploy the updated gemini-food-nutrition edge function and retry.'
+        : rawMessage;
+      setCoachError(message);
+      setCoachStatus('error');
+    }
   };
 
   if (activeHomePanel === 'weight') {
@@ -926,7 +987,7 @@ export default function Home() {
         <button
           type="button"
           onClick={() => push('/log')}
-          className="block bg-card rounded-2xl p-6 border border-border-subtle shadow-sm hover:border-brand-light transition-all active:scale-[0.99]"
+          className="block w-full bg-card rounded-2xl p-6 border border-border-subtle shadow-sm hover:border-brand-light transition-all active:scale-[0.99]"
         >
           <p className="mt-2 text-3xl font-extrabold text-text-main">
             {caloriesConsumed} of {Math.round(calorieGoal)}{' '}
@@ -982,7 +1043,7 @@ export default function Home() {
         <button
           type="button"
           onClick={() => push('/workouts')}
-          className="block bg-card rounded-2xl p-5 border border-border-subtle shadow-sm hover:border-brand-light transition-all active:scale-[0.99]"
+          className="block w-full bg-card rounded-2xl p-5 border border-border-subtle shadow-sm hover:border-brand-light transition-all active:scale-[0.99]"
         >
           <p className="text-sm font-bold uppercase tracking-wide text-text-muted">Workout</p>
           <div className="mt-3 grid grid-cols-3 gap-3">
@@ -1001,6 +1062,69 @@ export default function Home() {
           </div>
           <p className="mt-3 text-xs font-medium text-text-muted">Total workouts logged: {data?.workoutsCount ?? 0}</p>
         </button>
+
+        <section className="bg-card rounded-2xl p-5 border border-border-subtle shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-text-muted">AI coach</p>
+              <p className="text-xs text-text-muted mt-1">Runs only when you tap the button</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void generateCoachSuggestion()}
+              disabled={coachStatus === 'loading'}
+              className="rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-brand-fg disabled:opacity-60"
+            >
+              {coachStatus === 'loading' ? 'Loading...' : coachStatus === 'ready' ? 'Refresh suggestion' : 'Get AI suggestion'}
+            </button>
+          </div>
+
+          {coachStatus === 'idle' ? (
+            <p className="text-xs text-text-muted mt-3">No AI calls yet today. Tap “Get AI suggestion” when you want one.</p>
+          ) : null}
+
+          {coachStatus === 'error' ? (
+            <div className="mt-3 rounded-xl border border-border-subtle bg-surface px-3 py-2.5">
+              <p className="text-xs font-semibold text-text-main">Couldn’t generate suggestion</p>
+              <p className="text-xs text-text-muted mt-1">{coachError || 'Please try again in a moment.'}</p>
+            </div>
+          ) : null}
+
+          {coachStatus === 'ready' && coachSuggestion ? (
+            <div className="mt-3 space-y-2">
+              <div className="rounded-xl border border-border-subtle bg-surface px-3 py-2.5">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-text-muted">Suggestion</p>
+                <p className="text-sm font-semibold text-text-main mt-1">{coachSuggestion.suggestion_title || 'Daily suggestion'}</p>
+                <p className="text-xs text-text-muted mt-1">{coachSuggestion.suggestion_text || 'No suggestion text returned.'}</p>
+              </div>
+
+              {coachSuggestion.warning_text ? (
+                <div className="rounded-xl border border-border-subtle bg-surface px-3 py-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-text-muted">Warning</p>
+                  <p className="text-xs text-text-main mt-1">{coachSuggestion.warning_text}</p>
+                </div>
+              ) : null}
+
+              <div className="rounded-xl border border-border-subtle bg-surface px-3 py-2.5">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-text-muted">Food / recipe</p>
+                <p className="text-xs text-text-main mt-1">{coachSuggestion.food_or_recipe || 'No food suggestion returned.'}</p>
+              </div>
+
+              {coachSuggestion.why?.length ? (
+                <div className="rounded-xl border border-border-subtle bg-surface px-3 py-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-text-muted">Why this</p>
+                  <ul className="mt-1 space-y-1">
+                    {coachSuggestion.why.map((reason, index) => (
+                      <li key={`${reason}-${index}`} className="text-xs text-text-main">
+                        • {reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
 
         <section className="bg-card rounded-2xl p-5 border border-border-subtle shadow-sm">
           <div className="flex items-start justify-between gap-3">

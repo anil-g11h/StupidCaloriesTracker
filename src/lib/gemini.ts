@@ -20,6 +20,14 @@ export interface GeminiRecipeIngredientsPayload {
   }>;
 }
 
+export interface GeminiDailyCoachPayload {
+  suggestion_title?: string;
+  suggestion_text?: string;
+  warning_text?: string;
+  food_or_recipe?: string;
+  why?: string[];
+}
+
 interface GeminiFunctionResponse<T> {
   ok?: boolean;
   message?: string;
@@ -110,5 +118,33 @@ export async function fetchGeminiRecipeIngredients(input: {
   return invokeGeminiFunction<GeminiRecipeIngredientsPayload>({
     action: 'recipe_ingredients',
     recipeName: input.recipeName
+  });
+}
+
+export async function fetchGeminiDailyCoach(input: {
+  date: string;
+  caloriesGoal: number;
+  caloriesConsumed: number;
+  proteinGoal: number;
+  proteinConsumed: number;
+  carbsGoal: number;
+  carbsConsumed: number;
+  fatGoal: number;
+  fatConsumed: number;
+  waterGoal: number;
+  waterToday: number;
+  sleepGoal: number;
+  sleepToday: number;
+  workoutsToday: number;
+  workoutMinutesWeek: number;
+  todayLogsCount: number;
+  dietTags: string[];
+  allergies: string[];
+  mealPattern: string;
+  goalFocus: string;
+}): Promise<GeminiDailyCoachPayload> {
+  return invokeGeminiFunction<GeminiDailyCoachPayload>({
+    action: 'daily_coach',
+    ...input
   });
 }
