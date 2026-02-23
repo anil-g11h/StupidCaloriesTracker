@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { CaretLeftIcon as CaretLeft } from '@phosphor-icons/react';
 import { db } from '../../../lib/db';
+import { useStackNavigation } from '../../../lib/useStackNavigation';
 
 type WorkoutMediaEntry = {
   sourceId: string;
@@ -78,7 +79,7 @@ const estimateOneRepMax = (weight: number, reps: number) => {
 
 export default function ExerciseDetails() {
   const { id } = useParams();
-  const navigate = useNavigate();
+  const { pop } = useStackNavigation();
   const [fallback, setFallback] = useState<{ videoPath?: string; thumbnailPath?: string }>({});
   const [activeTab, setActiveTab] = useState<'summary' | 'history'>('summary');
   const [summaryChartMetric, setSummaryChartMetric] = useState<SummaryChartMetric>('heaviest');
@@ -385,7 +386,7 @@ export default function ExerciseDetails() {
     return (
       <div className="pb-32 pt-4 px-4 max-w-md mx-auto min-h-screen bg-background">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => pop()}
           className="mb-4 h-9 w-9 rounded-lg border border-border-subtle bg-surface text-text-main flex items-center justify-center"
           aria-label="Back"
         >
@@ -401,7 +402,7 @@ export default function ExerciseDetails() {
       <header className="mb-6 sticky top-0 bg-background z-20 py-2 -mx-4 px-4">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => pop()}
             className="h-9 w-9 rounded-lg border border-border-subtle bg-surface text-text-main flex items-center justify-center"
             aria-label="Back"
           >

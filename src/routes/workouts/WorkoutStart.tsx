@@ -1,9 +1,10 @@
 import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ArrowLeftIcon, PlayIcon, PlusIcon, WrenchIcon, GlobeSimpleIcon } from '@phosphor-icons/react';
 import { db } from '../../lib/db';
 import { startRoutineAsWorkout } from '../../lib/routines';
+import { useStackNavigation } from '../../lib/useStackNavigation';
 
 type RoutineSummary = {
   exercises: number;
@@ -13,7 +14,7 @@ type RoutineSummary = {
 const isLocalRoutine = (userId?: string) => !userId || userId === 'local-user' || userId === 'current-user';
 
 export default function WorkoutStart() {
-  const navigate = useNavigate();
+  const { push, pop } = useStackNavigation();
   const [startingRoutineId, setStartingRoutineId] = React.useState<string | null>(null);
 
   const routines = useLiveQuery(
@@ -63,7 +64,7 @@ export default function WorkoutStart() {
     setStartingRoutineId(routineId);
     try {
       const workoutId = await startRoutineAsWorkout(routineId);
-      navigate(`/workouts/${workoutId}`);
+      push(`/workouts/${workoutId}`);
     } catch (error) {
       console.error('Failed to start routine:', error);
       alert('Could not start routine.');
@@ -77,7 +78,7 @@ export default function WorkoutStart() {
       <header className="mb-5">
         <div className="flex items-center gap-3 mb-2">
           <button
-            onClick={() => navigate('/workouts')}
+            onClick={() => pop('/workouts')}
             className="h-9 w-9 rounded-lg border border-border-subtle bg-surface text-text-main flex items-center justify-center"
           >
             <ArrowLeftIcon size={16} />

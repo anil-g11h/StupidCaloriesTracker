@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
     PlusIcon as PlusIcon,
@@ -64,7 +64,6 @@ const buildEmptyWorkoutSetDraft = (): Omit<WorkoutSet, 'id' | 'workout_log_entry
 
 export default function ExerciseSelector() {
     const [searchParams] = useSearchParams();
-    const navigate = useNavigate();
     const workoutIdParam = searchParams.get('workoutId');
     const routineIdParam = searchParams.get('routineId');
     const replaceEntryIdParam = searchParams.get('replaceEntryId');
@@ -375,10 +374,10 @@ export default function ExerciseSelector() {
                     className="text-brand font-bold text-sm flex items-center gap-1 hover:opacity-70 transition-opacity"
                     onClick={() => {
                         if (routineId) {
-                            navigate(`/workouts/routines/${routineId}`);
+                            pop(`/workouts/routines/${routineId}`);
                             return;
                         }
-                        navigate(workoutId ? `/workouts/${workoutId}` : '/workouts');
+                        pop(workoutId ? `/workouts/${workoutId}` : '/workouts');
                     }}
                 >
                     <CaretLeftIcon weight="bold" />

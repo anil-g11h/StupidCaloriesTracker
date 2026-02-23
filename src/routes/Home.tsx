@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { db, type BodyMetric, type Food, type UserSettings } from '../lib/db';
 import { generateId } from '../lib';
 import { supabase } from '../lib/supabaseClient';
+import { useStackNavigation } from '../lib/useStackNavigation';
 
 type SettingsRow = UserSettings & { id: 'local-settings' };
 
@@ -60,6 +61,7 @@ const WATER_PORTION_OPTIONS = [
 const DEFAULT_FIRST_WEIGHT_KG = 70;
 
 export default function Home() {
+  const { push } = useStackNavigation();
   const now = new Date();
   const today = useMemo(() => toYyyyMmDd(now), [now]);
   const weekStartIso = useMemo(() => getWeekStart(now).toISOString(), [now]);
@@ -534,6 +536,21 @@ export default function Home() {
     }
   };
 
+  const setPanelWithTransition = (panel: 'weight' | 'water' | 'sleep' | null, direction: 'forward' | 'backward') => {
+    if (!document.startViewTransition) {
+      setActiveHomePanel(panel);
+      return;
+    }
+
+    document.documentElement.classList.add(`transition-${direction}`);
+    const transition = document.startViewTransition(() => {
+      setActiveHomePanel(panel);
+    });
+    transition.finished.finally(() => {
+      document.documentElement.classList.remove(`transition-${direction}`);
+    });
+  };
+
   if (activeHomePanel === 'weight') {
     return (
       <div className="min-h-screen bg-page pb-24 font-sans">
@@ -545,7 +562,7 @@ export default function Home() {
             </div>
             <button
               type="button"
-              onClick={() => setActiveHomePanel(null)}
+              onClick={() => setPanelWithTransition(null, 'backward')}
               className="text-xs font-medium text-text-muted hover:text-text-main"
             >
               Back
@@ -775,7 +792,7 @@ export default function Home() {
             </div>
             <button
               type="button"
-              onClick={() => setActiveHomePanel(null)}
+              onClick={() => setPanelWithTransition(null, 'backward')}
               className="text-xs font-medium text-text-muted hover:text-text-main"
             >
               Back
@@ -856,7 +873,7 @@ export default function Home() {
             </div>
             <button
               type="button"
-              onClick={() => setActiveHomePanel(null)}
+              onClick={() => setPanelWithTransition(null, 'backward')}
               className="text-xs font-medium text-text-muted hover:text-text-main"
             >
               Back
@@ -922,8 +939,9 @@ export default function Home() {
       </header>
 
       <main className="max-w-md mx-auto p-4 space-y-4">
-        <Link
-          to="/log"
+        <button
+          type="button"
+          onClick={() => push('/log')}
           className="block bg-card rounded-2xl p-6 border border-border-subtle shadow-sm hover:border-brand-light transition-all active:scale-[0.99]"
         >
           <p className="mt-2 text-3xl font-extrabold text-text-main">
@@ -975,10 +993,11 @@ export default function Home() {
               <p className="text-xs font-bold text-text-main">{fatConsumed} <span className="text-text-muted font-normal">/ {fatGoal}g</span></p>
             </div>
           </div>
-        </Link>
+        </button>
 
-        <Link
-          to="/workouts"
+        <button
+          type="button"
+          onClick={() => push('/workouts')}
           className="block bg-card rounded-2xl p-5 border border-border-subtle shadow-sm hover:border-brand-light transition-all active:scale-[0.99]"
         >
           <p className="text-sm font-bold uppercase tracking-wide text-text-muted">Workout</p>
@@ -997,7 +1016,7 @@ export default function Home() {
             </div>
           </div>
           <p className="mt-3 text-xs font-medium text-text-muted">Total workouts logged: {data?.workoutsCount ?? 0}</p>
-        </Link>
+        </button>
 
         <section className="bg-card rounded-2xl p-5 border border-border-subtle shadow-sm">
           <div className="flex items-start justify-between gap-3">
@@ -1011,7 +1030,7 @@ export default function Home() {
           <div className="mt-4 space-y-2.5">
             <button
               type="button"
-              onClick={() => setActiveHomePanel('weight')}
+              onClick={() => setPanelWithTransition('weight', 'forward')}
               className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-3 text-left hover:border-brand-light transition-all"
             >
               <div className="flex items-center justify-between gap-3">
@@ -1035,7 +1054,7 @@ export default function Home() {
 
             <button
               type="button"
-              onClick={() => setActiveHomePanel('water')}
+              onClick={() => setPanelWithTransition('water', 'forward')}
               className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-3 text-left hover:border-brand-light transition-all"
             >
               <div className="flex items-center justify-between gap-3">
@@ -1060,7 +1079,7 @@ export default function Home() {
 
             <button
               type="button"
-              onClick={() => setActiveHomePanel('sleep')}
+              onClick={() => setPanelWithTransition('sleep', 'forward')}
               className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-3 text-left hover:border-brand-light transition-all"
             >
               <div className="flex items-center justify-between gap-3">

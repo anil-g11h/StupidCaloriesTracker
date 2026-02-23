@@ -49,6 +49,42 @@ const toWorkoutMediaUrl = (path?: string | null) => {
 
 const DEFAULT_EXERCISE_THUMBNAIL_PATH = 'workouts/images/exercise-default-thumb.svg';
 
+const formatCompletedSetMetricValue = (
+  set: WorkoutSet,
+  field: 'weight' | 'reps' | 'distance' | 'duration_seconds' | null,
+  unit: string
+) => {
+  if (!field) return null;
+
+  const rawValue = Number((set as any)[field] ?? 0);
+  if (field === 'duration_seconds') {
+    const safeSeconds = Math.max(0, Math.floor(rawValue));
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
+    if (mins <= 0) return `${secs}s`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  if (unit === 'kg') return `${rawValue}kg`;
+  if (unit === 'km') return `${rawValue}km`;
+  if (unit === 'reps') return `${rawValue} reps`;
+  return `${rawValue}`;
+};
+
+const formatCompletedSetByMetric = (
+  set: WorkoutSet,
+  firstField: 'weight' | 'reps' | 'distance' | 'duration_seconds' | null,
+  firstUnit: string,
+  secondField: 'weight' | 'reps' | 'distance' | 'duration_seconds' | null,
+  secondUnit: string
+) => {
+  const firstValue = formatCompletedSetMetricValue(set, firstField, firstUnit);
+  const secondValue = formatCompletedSetMetricValue(set, secondField, secondUnit);
+
+  if (firstValue && secondValue) return `${firstValue} x ${secondValue}`;
+  return firstValue || secondValue || '-';
+};
+
 type WorkoutMediaEntry = {
   sourceId: string;
   videoPath: string;
@@ -253,6 +289,8 @@ const CompletedWorkoutView = ({
       {exercises?.map((exercise) => {
         const definition = definitions?.[exercise.exercise_id];
         const fallbackMedia = mediaFallbackByExerciseId?.[exercise.exercise_id];
+        const metricColumns = getMetricColumns(definition?.metric_type);
+        const isDurationOnlyMetric = metricColumns.first.field === 'duration_seconds' && metricColumns.second.field === null;
         const headerThumbnailUrl = toWorkoutMediaUrl(
           definition?.thumbnail_path ||
           fallbackMedia?.thumbnailPath ||
@@ -286,14 +324,29 @@ const CompletedWorkoutView = ({
 
             <div className="mb-2 grid grid-cols-12 gap-2 items-center text-[11px] font-semibold uppercase tracking-wide text-text-muted">
               <span className="col-span-2 text-center">Set</span>
-              <span className="col-span-10">Weight &amp; Reps</span>
+              {isDurationOnlyMetric ? (
+                <span className="col-span-10 text-center">{metricColumns.first.label}</span>
+              ) : (
+                <>
+                  <span className="col-span-5 text-center">{metricColumns.first.label}</span>
+                  <span className="col-span-5 text-center">{metricColumns.second.label}</span>
+                </>
+              )}
             </div>
 
             <div className="space-y-2">
               {currentSets.map((set) => (
                 <div key={set.id} className="grid grid-cols-12 gap-2 items-center rounded-lg bg-transparent px-2 py-2 text-sm">
                   <span className="col-span-2 text-center text-text-muted font-bold">{set.set_number}</span>
-                  <span className="col-span-10 text-text-main font-medium">{set.weight ?? 0}kg x {set.reps ?? 0}</span>
+                  <span className="col-span-10 text-text-main font-medium">
+                    {formatCompletedSetByMetric(
+                      set,
+                      metricColumns.first.field,
+                      metricColumns.first.unit,
+                      metricColumns.second.field,
+                      metricColumns.second.unit
+                    )}
+                  </span>
                 </div>
               ))}
             </div>
@@ -554,7 +607,7 @@ const WorkoutSessionComponent = () => {
     let cancelled = false;
 
     const resolveFallbackMedia = async () => {
-      const defs = Object.values(definitions || {});
+      const defs = Object.values(definitions || {}) as WorkoutExerciseDef[];
       if (!defs.length) {
         setMediaFallbackByExerciseId({});
         return;
@@ -836,6 +889,8 @@ const WorkoutSessionComponent = () => {
               const currentSets = sets?.[exercise.id] || [];
               const previousSets = previousSetsByExercise?.[exercise.exercise_id]?.sets || [];
               const metricColumns = getMetricColumns(def?.metric_type);
+              const firstMetricField = metricColumns.first.field;
+              const secondMetricField = metricColumns.second.field;
               const restSeconds = restPreferences?.[exercise.exercise_id] ?? 0;
               const isEditingRestTimer = editingRestExerciseId === exercise.id;
               const isMenuOpen = expandedMenuId === exercise.id;
@@ -988,23 +1043,23 @@ const WorkoutSessionComponent = () => {
                         ) : (
                           <>
                             <div className="col-span-2">
-                              {metricColumns.first.field ? (
-                                metricColumns.first.field === 'duration_seconds' ? (
+                              {firstMetricField ? (
+                                firstMetricField === 'duration_seconds' ? (
                                   <DurationScrollerInput
-                                    valueSeconds={Number((set as any)[metricColumns.first.field] ?? 0)}
-                                    onChange={(nextSeconds) => db.workout_sets.update(set.id, { [metricColumns.first.field]: nextSeconds })}
+                                    valueSeconds={Number((set as any)[firstMetricField] ?? 0)}
+                                    onChange={(nextSeconds) => db.workout_sets.update(set.id, { [firstMetricField]: nextSeconds })}
                                   />
                                 ) : (
                                   <input
                                     type="number"
                                     defaultValue={
-                                      metricColumns.first.field === 'reps'
-                                        ? ((set as any)[metricColumns.first.field] ?? '')
-                                        : Number((set as any)[metricColumns.first.field] ?? 0)
+                                      firstMetricField === 'reps'
+                                        ? ((set as any)[firstMetricField] ?? '')
+                                        : Number((set as any)[firstMetricField] ?? 0)
                                     }
-                                    placeholder={getSetFieldPlaceholder(set, metricColumns.first.field)}
+                                    placeholder={getSetFieldPlaceholder(set, firstMetricField)}
                                     className="w-full bg-transparent p-2 rounded text-center font-bold"
-                                    onChange={(e) => db.workout_sets.update(set.id, { [metricColumns.first.field]: Number(e.target.value) })}
+                                    onChange={(e) => db.workout_sets.update(set.id, { [firstMetricField]: Number(e.target.value) })}
                                   />
                                 )
                               ) : (
@@ -1012,23 +1067,23 @@ const WorkoutSessionComponent = () => {
                               )}
                             </div>
                             <div className="col-span-3">
-                              {metricColumns.second.field ? (
-                                metricColumns.second.field === 'duration_seconds' ? (
+                              {secondMetricField ? (
+                                secondMetricField === 'duration_seconds' ? (
                                   <DurationScrollerInput
-                                    valueSeconds={Number((set as any)[metricColumns.second.field] ?? 0)}
-                                    onChange={(nextSeconds) => db.workout_sets.update(set.id, { [metricColumns.second.field]: nextSeconds })}
+                                    valueSeconds={Number((set as any)[secondMetricField] ?? 0)}
+                                    onChange={(nextSeconds) => db.workout_sets.update(set.id, { [secondMetricField]: nextSeconds })}
                                   />
                                 ) : (
                                   <input
                                     type="number"
                                     defaultValue={
-                                      metricColumns.second.field === 'reps'
-                                        ? ((set as any)[metricColumns.second.field] ?? '')
-                                        : Number((set as any)[metricColumns.second.field] ?? 0)
+                                      secondMetricField === 'reps'
+                                        ? ((set as any)[secondMetricField] ?? '')
+                                        : Number((set as any)[secondMetricField] ?? 0)
                                     }
-                                    placeholder={getSetFieldPlaceholder(set, metricColumns.second.field)}
+                                    placeholder={getSetFieldPlaceholder(set, secondMetricField)}
                                     className="w-full bg-transparent p-2 rounded text-center font-bold"
-                                    onChange={(e) => db.workout_sets.update(set.id, { [metricColumns.second.field]: Number(e.target.value) })}
+                                    onChange={(e) => db.workout_sets.update(set.id, { [secondMetricField]: Number(e.target.value) })}
                                   />
                                 )
                               ) : (

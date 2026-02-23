@@ -1,10 +1,11 @@
     import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+    import { useSearchParams, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Food } from '../../../lib/db';
 import { generateId } from '../../../lib';
     import { analyzeEaaRatio, scoreFoodForEaaDeficit, type EaaRatioGroupKey } from '../../../lib/eaa';
 import { supabase } from '../../../lib/supabaseClient';
+    import { useStackNavigation } from '../../../lib/useStackNavigation';
 import {
   getDietaryConflictWarnings,
   hasDietaryPreferences,
@@ -81,7 +82,7 @@ function formatServingLabel(food: Food): string {
 
 export default function AddLogEntry() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const { pop } = useStackNavigation();
 
   // --- Route Params ---
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
@@ -591,7 +592,7 @@ export default function AddLogEntry() {
       
       if (logId) {
         await db.logs.put(entry);
-        navigate(`/log?date=${date}`);
+        pop(`/log?date=${date}`);
         return;
       }
 
@@ -606,7 +607,7 @@ export default function AddLogEntry() {
         return;
       }
 
-      navigate(`/log?date=${date}`);
+      pop(`/log?date=${date}`);
     } catch (error) {
       console.error('Failed to save log:', error);
       alert('Failed to save log');
@@ -647,13 +648,13 @@ export default function AddLogEntry() {
   return (
     <div className="container mx-auto p-4 max-w-md pb-24">
       <div className="flex items-center mb-4">
-        <Link to={`/log?date=${date}`} className="mr-4 text-text-muted hover:text-text-main">
+        <button type="button" onClick={() => pop(`/log?date=${date}`)} className="mr-4 text-text-muted hover:text-text-main">
           &larr; Back
-        </Link>
+        </button>
         <h1 className="text-2xl font-bold text-text-main">Add to {mealLabel}</h1>
         {!logId && (
           <button
-            onClick={() => navigate(`/log?date=${date}`)}
+            onClick={() => pop(`/log?date=${date}`)}
             className="ml-auto px-3 py-1.5 rounded-full text-xs font-bold bg-brand text-brand-fg hover:opacity-90 transition-opacity"
           >
             Done{addedCount > 0 ? ` (${addedCount})` : ''}
