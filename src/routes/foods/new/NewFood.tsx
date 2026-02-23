@@ -644,7 +644,7 @@ const CreateFood: React.FC = () => {
   }
 
   return (
-<div className="min-h-screen bg-page pb-24 font-sans">
+<div className="bg-page font-sans">
       <RouteHeader
         title={isEditMode ? 'Edit Food' : 'New Food'}
         onBack={() => pop()}

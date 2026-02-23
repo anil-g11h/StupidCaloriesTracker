@@ -584,7 +584,7 @@ export default function Home() {
 
   if (activeHomePanel === 'weight') {
     return (
-      <div className="min-h-screen bg-page pb-24 font-sans">
+      <div className="bg-page font-sans">
         <RouteHeader title="Weight log" onBack={() => setPanelWithTransition(null, 'backward')} />
 
         <main className="max-w-md mx-auto p-4">
@@ -800,7 +800,7 @@ export default function Home() {
 
   if (activeHomePanel === 'water') {
     return (
-      <div className="min-h-screen bg-page pb-24 font-sans">
+      <div className="bg-page font-sans">
         <RouteHeader title="Water tracker" onBack={() => setPanelWithTransition(null, 'backward')} />
 
         <main className="max-w-md mx-auto p-4">
@@ -867,7 +867,7 @@ export default function Home() {
 
   if (activeHomePanel === 'sleep') {
     return (
-      <div className="min-h-screen bg-page pb-24 font-sans">
+      <div className="bg-page font-sans">
         <RouteHeader title="Sleep tracker" onBack={() => setPanelWithTransition(null, 'backward')} />
 
         <main className="max-w-md mx-auto p-4">
@@ -919,7 +919,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-page pb-24 font-sans">
+    <div className="bg-page font-sans">
       <RouteHeader title="Dashboard" />
 
       <main className="max-w-md mx-auto p-4 space-y-4">

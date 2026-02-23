@@ -376,7 +376,7 @@ export default function ExerciseDetails() {
 
   if (exercise === undefined) {
     return (
-      <div className="min-h-screen bg-background pb-32 font-sans">
+      <div className="bg-background pb-32 font-sans">
         <RouteHeader title="Exercise" onBack={() => pop()} containerClassName="max-w-md mx-auto px-4 py-3" />
         <div className="px-4 pt-4 max-w-md mx-auto">
           <div className="rounded-2xl border border-border-subtle bg-card p-4 shadow-sm text-sm text-text-muted">Loading exercise...</div>
@@ -387,7 +387,7 @@ export default function ExerciseDetails() {
 
   if (!exercise) {
     return (
-      <div className="min-h-screen bg-background pb-32 font-sans">
+      <div className="bg-background pb-32 font-sans">
         <RouteHeader title="Exercise" onBack={() => pop()} containerClassName="max-w-md mx-auto px-4 py-3" />
         <div className="px-4 pt-4 max-w-md mx-auto">
           <div className="rounded-2xl border border-border-subtle bg-card p-4 shadow-sm text-sm text-text-muted">Exercise not found.</div>
@@ -397,7 +397,7 @@ export default function ExerciseDetails() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-32 font-sans">
+    <div className="bg-background pb-32 font-sans">
       <RouteHeader title={exercise.name} onBack={() => pop()} containerClassName="max-w-md mx-auto px-4 py-3" />
 
       <div className="px-4 pt-4 max-w-md mx-auto space-y-4">

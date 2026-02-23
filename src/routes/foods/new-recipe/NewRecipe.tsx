@@ -860,7 +860,7 @@ export default function CreateRecipe() {
   };
 
   return (
-    <div className="min-h-screen bg-page pb-24 font-sans">
+    <div className="bg-page font-sans">
       <RouteHeader title="Create New Recipe" onBack={() => pop()} />
 
       <div className="max-w-md mx-auto p-4">

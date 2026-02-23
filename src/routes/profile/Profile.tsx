@@ -62,7 +62,7 @@ export default function ProfileSettings() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-page pb-24">
+      <div className="bg-page">
         <RouteHeader title="Profile" />
         <div className="px-4 max-w-md mx-auto mt-8">
           <div className="bg-card p-5 rounded-2xl border border-border-subtle">
@@ -75,7 +75,7 @@ export default function ProfileSettings() {
   }
 
   return (
-    <div className="min-h-screen bg-page pb-24">
+    <div className="bg-page">
       <RouteHeader
         title="Profile Settings"
         rightAction={

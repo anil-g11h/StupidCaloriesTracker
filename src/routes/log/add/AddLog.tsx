@@ -646,7 +646,7 @@ export default function AddLogEntry() {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-md pb-24">
+    <div className="container mx-auto p-4 max-w-md">
       <div className="flex items-center mb-4">
         <h1 className="text-2xl font-bold text-text-main">Add to {mealLabel}</h1>
         {!logId && (

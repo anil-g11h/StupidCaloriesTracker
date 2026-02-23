@@ -75,7 +75,7 @@ export default function WorkoutStart() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24 font-sans">
+    <div className="bg-background font-sans">
       <RouteHeader title="Start Workout" onBack={() => pop()} containerClassName="max-w-md mx-auto px-4 py-3" />
 
       <div className="pt-4 px-4 max-w-md mx-auto">

@@ -768,7 +768,7 @@ export default function DailyLogPage() {
   };
 
   return (
-    <div className="min-h-screen bg-page pb-20 font-sans">
+    <div className="bg-page font-sans">
       <RouteHeader
         title="Daily Log"
         rightAction={

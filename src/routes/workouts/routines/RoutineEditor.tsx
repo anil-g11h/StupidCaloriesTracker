@@ -329,7 +329,7 @@ export default function RoutineEditor() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24 font-sans">
+    <div className="bg-background font-sans">
       <RouteHeader
         title="Routine Builder"
         onBack={() => pop()}

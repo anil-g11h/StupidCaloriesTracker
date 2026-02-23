@@ -22,7 +22,7 @@ export default function FoodList() {
   }, [foods, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-page pb-24 font-sans">
+    <div className="bg-page font-sans">
       <RouteHeader
         title="Foods"
         rightAction={

@@ -669,7 +669,7 @@ const WorkoutSessionComponent = () => {
   }, [definitions]);
 
   return (
-    <div className="pb-32 pt-4 px-4 max-w-md mx-auto min-h-screen bg-background">
+    <div className="pb-32 pt-4 px-4 max-w-md mx-auto bg-background">
       {/* Sticky Header */}
       <header className="mb-6 sticky top-0 bg-background z-20 py-2 border-b border-border-subtle -mx-4 px-4">
         <div className="flex justify-between items-center mb-2">

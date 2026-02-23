@@ -351,7 +351,7 @@ export default function WorkoutList() {
   };
 
   return (
-    <div className="pb-24 pt-4 px-4 max-w-md mx-auto">
+    <div className="pt-4 px-4 max-w-md mx-auto">
       <header className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text-main">Workouts</h1>
         <Link
