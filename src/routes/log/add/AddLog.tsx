@@ -307,6 +307,13 @@ export default function AddLogEntry() {
     return base;
   }, [searchResults, sortOption, logUsageByFood]);
 
+  const normalizedSearchQuery = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
+
+  const hasExactFoodNameMatch = useMemo(() => {
+    if (!normalizedSearchQuery) return false;
+    return (searchResults || []).some((food) => food.name.trim().toLowerCase() === normalizedSearchQuery);
+  }, [searchResults, normalizedSearchQuery]);
+
   const foodWarningsById = useLiveQuery(
     async () => {
       if (!hasDietaryProfile || rankedSearchResults.length === 0) return {} as Record<string, string[]>;
@@ -677,6 +684,19 @@ export default function AddLogEntry() {
             </SortChip>
           </div>
           <div className="space-y-2">
+            {normalizedSearchQuery.length > 0 && !hasExactFoodNameMatch && (
+              <div className="p-3 bg-surface border border-border-subtle rounded-lg flex items-center justify-between gap-2">
+                <div className="text-sm text-text-main">
+                  Can’t find <span className="font-semibold">"{searchQuery.trim()}"</span> exactly?
+                </div>
+                <Link
+                  to={`/foods/new?name=${encodeURIComponent(searchQuery.trim())}`}
+                  className="px-3 py-1.5 rounded-lg bg-brand text-brand-fg text-sm font-semibold hover:opacity-90 transition-opacity whitespace-nowrap"
+                >
+                  Create Food
+                </Link>
+              </div>
+            )}
             {rankedSearchResults && rankedSearchResults.length > 0 ? rankedSearchResults.map((food) => {
               const alreadyAdded = mealLogIdsByFood.has(food.id) || addedFoodIds.includes(food.id);
               const warnings = foodWarningsById[food.id] || [];
