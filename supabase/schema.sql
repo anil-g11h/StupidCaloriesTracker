@@ -30,6 +30,7 @@ create table if not exists public.foods (
   serving_size numeric default 100,
   serving_unit text default 'g',
   is_recipe boolean default false,
+  is_supplement boolean default false,
   is_public boolean default false,
   micros jsonb default '{}'::jsonb,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,

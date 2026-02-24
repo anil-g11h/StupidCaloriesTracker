@@ -89,6 +89,11 @@ export default function FoodList() {
                 </div>
 
                 <div className="flex items-center space-x-2">
+                  {food.is_supplement && (
+                    <span className="px-2 py-1 bg-brand/10 text-brand text-xs rounded-full">
+                      Supplement
+                    </span>
+                  )}
                   {food.is_recipe && (
                     <span className="px-2 py-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs rounded-full">
                       Recipe

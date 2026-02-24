@@ -37,6 +37,7 @@ export interface Food {
   user_id?: string | null; // null for public foods
   name: string;
   brand?: string;
+  is_supplement?: boolean;
   diet_tags?: string[];
   allergen_tags?: string[];
   ai_notes?: string;
@@ -333,6 +334,27 @@ export class MyDatabase extends Dexie {
     this.version(5).stores({
       profiles: 'id',
       foods: 'id, user_id, name, is_recipe, synced',
+      food_ingredients: 'id, parent_food_id, child_food_id, synced',
+      logs: 'id, user_id, date, meal_type, synced',
+      goals: 'id, user_id, start_date, synced',
+      metrics: 'id, user_id, date, type, synced',
+      settings: 'id, user_id, synced',
+      activities: 'id, user_id, name, synced',
+      activity_logs: 'id, user_id, date, activity_id, synced',
+      sync_queue: '++id, table, action, created_at',
+      workout_exercises_def: 'id, user_id, name, muscle_group, metric_type, synced',
+      workouts: 'id, user_id, start_time, synced',
+      workout_log_entries: 'id, workout_id, exercise_id, synced',
+      workout_sets: 'id, workout_log_entry_id, synced',
+      workout_rest_preferences: 'id, user_id, exercise_id, [user_id+exercise_id], updated_at, synced',
+      workout_routines: 'id, user_id, name, updated_at, synced',
+      workout_routine_entries: 'id, routine_id, exercise_id, sort_order, synced',
+      workout_routine_sets: 'id, routine_entry_id, synced'
+    });
+
+    this.version(6).stores({
+      profiles: 'id',
+      foods: 'id, user_id, name, is_recipe, is_supplement, synced',
       food_ingredients: 'id, parent_food_id, child_food_id, synced',
       logs: 'id, user_id, date, meal_type, synced',
       goals: 'id, user_id, start_date, synced',

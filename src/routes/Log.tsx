@@ -9,6 +9,7 @@ import {
 } from '@phosphor-icons/react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { db, type BodyMetric, type DailyLog, type Food, type Profile } from '../lib/db';
+import { generateId } from '../lib';
 import { analyzeEaaRatio } from '../lib/eaa';
 import RouteHeader from '../lib/components/RouteHeader';
 
@@ -885,10 +886,22 @@ export default function DailyLogPage() {
   }, [analytics.microsConsumed]);
 
   const mealDefinitions = useMemo<MealDefinition[]>(() => {
-    if (settings?.meals?.length) {
-      return settings.meals.map(buildMealDefinitionFromSetting);
-    }
-    return getDefaultMeals();
+    const configuredMeals = settings?.meals?.length
+      ? settings.meals.map(buildMealDefinitionFromSetting)
+      : getDefaultMeals();
+
+    const hasSupplementMeal = configuredMeals.some((meal) => normalizeKey(meal.id) === 'supplement');
+    if (hasSupplementMeal) return configuredMeals;
+
+    return [
+      ...configuredMeals,
+      buildMealDefinitionFromSetting({
+        id: 'supplement',
+        name: 'Supplement',
+        targetMode: 'calories',
+        targetValue: 0
+      })
+    ];
   }, [settings]);
 
   const mealSections = useMemo<MealSection[]>(() => {
@@ -945,6 +958,31 @@ export default function DailyLogPage() {
 
     return [...configuredSections, ...legacySections];
   }, [extendedLogs, mealDefinitions, goals.calories]);
+
+  const supplementFoods = useLiveQuery(async () => {
+    const foods = await db.foods
+      .filter((food) => Boolean(food.is_supplement))
+      .toArray();
+
+    return foods.sort((a, b) => a.name.localeCompare(b.name));
+  }, []);
+
+  const supplementLogIdsByFood = useMemo(() => {
+    const logs = extendedLogs
+      .filter((log) => normalizeKey(log.meal_type || '') === 'supplement')
+      .sort((a, b) => {
+        const aTs = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTs = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTs - aTs;
+      });
+
+    return logs.reduce<Map<string, string[]>>((acc, log) => {
+      const ids = acc.get(log.food_id) || [];
+      ids.push(log.id);
+      acc.set(log.food_id, ids);
+      return acc;
+    }, new Map());
+  }, [extendedLogs]);
 
   const loggedMealSections = useMemo(() => mealSections.filter((meal) => meal.logs.length > 0), [mealSections]);
   const mealCountForTargets = Math.max(1, loggedMealSections.length);
@@ -1089,6 +1127,35 @@ export default function DailyLogPage() {
     });
 
     setOpenActionsLogId(null);
+  };
+
+  const toggleSupplementCompletion = async (food: Food) => {
+    try {
+      const existingLogs = await db.logs
+        .where('date')
+        .equals(date)
+        .and((log) => normalizeKey(log.meal_type || '') === 'supplement' && log.food_id === food.id)
+        .toArray();
+
+      if (existingLogs.length > 0) {
+        await db.logs.bulkDelete(existingLogs.map((log) => log.id));
+        return;
+      }
+
+      await db.logs.add({
+        id: generateId(),
+        user_id: currentUserId || 'local-user',
+        date,
+        meal_type: 'supplement',
+        food_id: food.id,
+        amount_consumed: 1,
+        synced: 0,
+        created_at: new Date()
+      });
+    } catch (error) {
+      console.error('Failed to toggle supplement completion:', error);
+      alert('Failed to update supplement');
+    }
   };
 
   return (
@@ -1365,6 +1432,8 @@ export default function DailyLogPage() {
         {!isReportView && mealSections.map((meal) => {
           const mealCalories = meal.logs.reduce((sum, log) => sum + log.calories, 0);
           const mealAmino = perMealAminoByMealId[meal.id];
+          const isSupplementSection = normalizeKey(meal.id) === 'supplement';
+          const usesSupplementChecklist = isSupplementSection && (supplementFoods?.length || 0) > 0;
 
           return (
             <div key={meal.id} className="mb-6">
@@ -1419,7 +1488,37 @@ export default function DailyLogPage() {
               </div>
 
               <div className="space-y-3">
-                {meal.logs.map((log) => {
+                {usesSupplementChecklist && (
+                  <div className="bg-surface rounded-xl border border-border-subtle p-2.5">
+                    <p className="text-[11px] font-semibold text-text-main mb-2">Supplements checklist</p>
+                    <div className="space-y-2">
+                      {supplementFoods!.map((food) => {
+                        const completed = supplementLogIdsByFood.has(food.id);
+
+                        return (
+                          <button
+                            key={`supplement-check-${food.id}`}
+                            type="button"
+                            onClick={() => toggleSupplementCompletion(food)}
+                            className={`w-full px-3 py-2 rounded-lg border text-left flex items-center justify-between gap-2 transition-colors ${
+                              completed
+                                ? 'bg-brand/10 border-brand text-text-main'
+                                : 'bg-card border-border-subtle text-text-main hover:border-brand'
+                            }`}
+                            aria-label={`${completed ? 'Mark not completed' : 'Mark completed'} ${food.name}`}
+                          >
+                            <span className="text-sm font-medium truncate">{food.name}</span>
+                            <span className={`text-sm font-bold ${completed ? 'text-brand' : 'text-text-muted'}`}>
+                              {completed ? '✓' : '○'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {!usesSupplementChecklist && meal.logs.map((log) => {
                   const proteinKcal = Math.max(0, log.protein * 4);
                   const carbsKcal = Math.max(0, log.carbs * 4);
                   const fatKcal = Math.max(0, log.fat * 9);

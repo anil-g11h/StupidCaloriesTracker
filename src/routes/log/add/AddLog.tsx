@@ -209,6 +209,14 @@ export default function AddLogEntry() {
     return await db.foods.limit(20).toArray();
   }, [searchQuery]);
 
+  const supplementFoods = useLiveQuery(async () => {
+    const foods = await db.foods
+      .filter((food) => Boolean(food.is_supplement))
+      .toArray();
+
+    return foods.sort((a, b) => a.name.localeCompare(b.name));
+  }, []);
+
   const dayNutritionContext = useLiveQuery(async () => {
     const dayLogs = await db.logs.where('date').equals(date).toArray();
     const dayFoodIds = [...new Set(dayLogs.map((log) => log.food_id))];
@@ -311,6 +319,7 @@ export default function AddLogEntry() {
   }, [searchResults, sortOption, logUsageByFood]);
 
   const normalizedSearchQuery = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
+  const isSupplementMeal = useMemo(() => mealType.trim().toLowerCase() === 'supplement', [mealType]);
 
   const hasExactFoodNameMatch = useMemo(() => {
     if (!normalizedSearchQuery) return false;
@@ -702,6 +711,45 @@ export default function AddLogEntry() {
               className="w-full p-3 bg-surface text-text-main border border-transparent rounded-lg shadow-sm focus:ring-2 focus:ring-brand focus:outline-none"
             />
           </div>
+
+          {isSupplementMeal && (supplementFoods?.length || 0) > 0 && searchQuery.trim().length === 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-text-muted mb-2">Supplement quick add</p>
+              <div className="space-y-2">
+                {supplementFoods!.map((food) => {
+                  const alreadyAdded = mealLogIdsByFood.has(food.id) || addedFoodIds.includes(food.id);
+
+                  return (
+                    <div
+                      key={`supplement-${food.id}`}
+                      onClick={() => handleSelectFood(food)}
+                      className="w-full text-left p-3 bg-card border border-border-subtle rounded-lg shadow-sm hover:bg-surface transition-colors flex justify-between items-center cursor-pointer"
+                    >
+                      <div>
+                        <div className="font-semibold text-text-main">{food.name}</div>
+                        <div className="text-xs text-text-muted">
+                          {food.brand ? `${food.brand} • ` : ''}{food.calories} cal / {formatServingLabel(food)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void toggleFoodInMeal(food);
+                        }}
+                        className={`w-8 h-8 rounded-full text-2xl flex items-center justify-center ${alreadyAdded ? 'bg-green-500 text-white text-lg font-black' : 'bg-brand text-brand-fg'}`}
+                        aria-label={alreadyAdded ? `Remove ${food.name} from meal` : `Add ${food.name} to meal`}
+                        title={alreadyAdded ? 'Remove from meal' : 'Add to meal'}
+                      >
+                        {alreadyAdded ? '−' : '+'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="mb-4 flex flex-wrap gap-2">
             <SortChip active={sortOption === 'recent'} onClick={() => setSortOption('recent')}>
               Recently Added

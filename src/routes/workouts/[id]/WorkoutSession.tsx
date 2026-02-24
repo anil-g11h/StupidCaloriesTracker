@@ -111,6 +111,32 @@ const mediaNameFromVideoPath = (videoPath: string) => {
   return normalizeName(noGender.replace(/-/g, ' '));
 };
 
+const getEditableNumericInputValue = (value: unknown): string | number => {
+  if (value === null || value === undefined) return '';
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '';
+  return numericValue === 0 ? '' : numericValue;
+};
+
+const handleWorkoutNumericInputFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+  if (event.currentTarget.value === '0') {
+    event.currentTarget.value = '';
+    return;
+  }
+  event.currentTarget.select();
+};
+
+const updateWorkoutSetNumberField = (
+  setId: string,
+  field: 'weight' | 'reps' | 'distance',
+  rawValue: string
+) => {
+  if (rawValue.trim() === '') return;
+  const nextValue = Number(rawValue);
+  if (!Number.isFinite(nextValue)) return;
+  void db.workout_sets.update(setId, { [field]: nextValue });
+};
+
 
 
 
@@ -199,15 +225,17 @@ const SetRow = ({ set, onToggle }: { set: WorkoutSet; onToggle: () => void }) =>
     <div className="col-span-9 grid grid-cols-2 gap-2">
       <input
         type="number"
-        defaultValue={set.weight}
+        defaultValue={getEditableNumericInputValue(set.weight)}
         className="bg-surface p-2 rounded text-center font-bold outline-none focus:ring-1 focus:ring-brand"
-        onChange={(e) => db.workout_sets.update(set.id, { weight: Number(e.target.value) })}
+        onFocus={handleWorkoutNumericInputFocus}
+        onChange={(e) => updateWorkoutSetNumberField(set.id, 'weight', e.target.value)}
       />
       <input
         type="number"
-        defaultValue={set.reps}
+        defaultValue={getEditableNumericInputValue(set.reps)}
         className="bg-surface p-2 rounded text-center font-bold outline-none focus:ring-1 focus:ring-brand"
-        onChange={(e) => db.workout_sets.update(set.id, { reps: Number(e.target.value) })}
+        onFocus={handleWorkoutNumericInputFocus}
+        onChange={(e) => updateWorkoutSetNumberField(set.id, 'reps', e.target.value)}
       />
     </div>
     <button
@@ -1044,14 +1072,11 @@ const WorkoutSessionComponent = () => {
                                 ) : (
                                   <input
                                     type="number"
-                                    defaultValue={
-                                      firstMetricField === 'reps'
-                                        ? ((set as any)[firstMetricField] ?? '')
-                                        : Number((set as any)[firstMetricField] ?? 0)
-                                    }
+                                    defaultValue={getEditableNumericInputValue((set as any)[firstMetricField])}
                                     placeholder={getSetFieldPlaceholder(set, firstMetricField)}
                                     className="w-full bg-transparent p-2 rounded text-center font-bold"
-                                    onChange={(e) => db.workout_sets.update(set.id, { [firstMetricField]: Number(e.target.value) })}
+                                    onFocus={handleWorkoutNumericInputFocus}
+                                    onChange={(e) => updateWorkoutSetNumberField(set.id, firstMetricField, e.target.value)}
                                   />
                                 )
                               ) : (
@@ -1068,14 +1093,11 @@ const WorkoutSessionComponent = () => {
                                 ) : (
                                   <input
                                     type="number"
-                                    defaultValue={
-                                      secondMetricField === 'reps'
-                                        ? ((set as any)[secondMetricField] ?? '')
-                                        : Number((set as any)[secondMetricField] ?? 0)
-                                    }
+                                    defaultValue={getEditableNumericInputValue((set as any)[secondMetricField])}
                                     placeholder={getSetFieldPlaceholder(set, secondMetricField)}
                                     className="w-full bg-transparent p-2 rounded text-center font-bold"
-                                    onChange={(e) => db.workout_sets.update(set.id, { [secondMetricField]: Number(e.target.value) })}
+                                    onFocus={handleWorkoutNumericInputFocus}
+                                    onChange={(e) => updateWorkoutSetNumberField(set.id, secondMetricField, e.target.value)}
                                   />
                                 )
                               ) : (

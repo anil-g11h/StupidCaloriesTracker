@@ -71,6 +71,15 @@ export class SyncManager {
         return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
     }
 
+    private isWorkoutSessionSyncTable(table: string): boolean {
+        return table === 'workouts' || table === 'workout_log_entries' || table === 'workout_sets';
+    }
+
+    private async hasInProgressWorkoutSession(): Promise<boolean> {
+        const workouts = await db.workouts.toArray();
+        return workouts.some((workout) => !workout.end_time);
+    }
+
     private async fetchRemoteIds(config: SyncTableConfig): Promise<Set<string> | null> {
         const PAGE_SIZE = 500;
         const remoteIds = new Set<string>();
@@ -421,10 +430,17 @@ export class SyncManager {
 
         console.log(`[SyncManager] Pushing ${sortedQueue.length} changes for user ${session.user.id}...`);
 
+        const deferWorkoutSessionSync = await this.hasInProgressWorkoutSession();
         let failedCount = 0;
+        let deferredWorkoutCount = 0;
         this.skippedSharedWorkoutExerciseUpdates = 0;
 
         for (const item of sortedQueue) {
+            if (deferWorkoutSessionSync && this.isWorkoutSessionSyncTable(item.table)) {
+                deferredWorkoutCount += 1;
+                continue;
+            }
+
       try {
         await this.processQueueItem(item, session);
         if (item.id) {
@@ -452,6 +468,10 @@ export class SyncManager {
 
         if (failedCount > 0) {
             console.warn(`[SyncManager] ${failedCount} queue item(s) failed and were kept for retry`);
+        }
+
+        if (deferredWorkoutCount > 0) {
+            console.log(`[SyncManager] Deferred ${deferredWorkoutCount} in-progress workout queue item(s) until workout completion`);
         }
   }
 
@@ -939,11 +959,17 @@ export class SyncManager {
         { dexie: 'workout_log_entries', supabase: 'workout_log_entries', dateField: 'updated_at', fallbackDateField: 'created_at' },
         { dexie: 'workout_sets', supabase: 'workout_sets', dateField: 'updated_at', fallbackDateField: 'created_at' }
     ];
+
+    const deferWorkoutSessionSync = await this.hasInProgressWorkoutSession();
     
     // Batch size to prevent large payloads
     const BATCH_SIZE = 100; // conservative batch size
 
     for (const config of tables) {
+        if (deferWorkoutSessionSync && this.isWorkoutSessionSyncTable(config.dexie)) {
+            continue;
+        }
+
         // Skip private tables if no session
         if (!session?.user && !config.public) {
              continue;
@@ -1029,6 +1055,7 @@ export class SyncManager {
 
             if (data && data.length > 0) {
                 console.log(`[SyncManager] Pulled ${data.length} records for ${config.dexie} (page ${page})`);
+                hasChanges = true;
                 
                 // Update local DB
                 const rows = (data as any[]).map(row => {
@@ -1041,7 +1068,6 @@ export class SyncManager {
                 await withRemoteSyncWrite(async () => {
                     await db.table(config.dexie).bulkPut(rows);
                 });
-                hasChanges = true;
 
                 // Track max timestamp from the data we just received
                 for (const row of (data as any[])) {

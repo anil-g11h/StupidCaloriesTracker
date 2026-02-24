@@ -182,6 +182,7 @@ const SERVING_UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)', copyLabel: 'gram' },
   { value: 'ml', label: 'Milliliters (ml)', copyLabel: 'ml' },
   { value: 'oz', label: 'Ounces (oz)', copyLabel: 'oz' },
+  { value: 'tablet', label: 'Tablet', copyLabel: 'tablet' },
   { value: 'serving', label: 'Serving', copyLabel: 'serving' }
 ] as const;
 
@@ -192,6 +193,7 @@ const normalizeServingUnit = (rawUnit?: string) => {
   if (unit === 'g' || unit === 'gram' || unit === 'grams' || unit === 'gm') return 'g';
   if (unit === 'ml' || unit === 'milliliter' || unit === 'milliliters') return 'ml';
   if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') return 'oz';
+  if (unit === 'tablet' || unit === 'tablets' || unit === 'tab' || unit === 'tabs') return 'tablet';
   if (unit === 'serving' || unit === 'servings' || unit === 'piece' || unit === 'pieces' || unit === 'pc') {
     return 'serving';
   }
@@ -273,6 +275,7 @@ const CreateFood: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [showAiPasteInput, setShowAiPasteInput] = useState(false);
   const [isRecipeFood, setIsRecipeFood] = useState(false);
+  const [isSupplement, setIsSupplement] = useState(false);
   const [recipeIngredients, setRecipeIngredients] = useState<Array<{
     id: string;
     childFoodId: string;
@@ -348,6 +351,7 @@ const CreateFood: React.FC = () => {
         setAiNotes(existingFood.ai_notes || '');
         setUnitFallbackIngredients(parseUnitFallbackIngredients(existingFood.ai_notes || ''));
         setIsRecipeFood(Boolean(existingFood.is_recipe));
+        setIsSupplement(Boolean(existingFood.is_supplement));
 
         if (existingFood.is_recipe && editFoodId) {
           const ingredientRows = await db.food_ingredients.where('parent_food_id').equals(editFoodId).toArray();
@@ -609,6 +613,7 @@ const CreateFood: React.FC = () => {
         await db.foods.update(editFoodId, {
           name,
           brand: brand || undefined,
+          is_supplement: isSupplement,
           diet_tags: dietTags,
           allergen_tags: allergenTags,
           ai_notes: aiNotes || undefined,
@@ -628,6 +633,7 @@ const CreateFood: React.FC = () => {
           id: generateId(),
           name,
           brand: brand || undefined,
+          is_supplement: isSupplement,
           diet_tags: dietTags,
           allergen_tags: allergenTags,
           ai_notes: aiNotes || undefined,
@@ -717,6 +723,15 @@ const CreateFood: React.FC = () => {
             onChange={(e) => setBrand(e.target.value)}
             className="w-full p-2 text-sm text-text-muted bg-surface rounded border-none focus:ring-1 focus:ring-brand" 
           />
+          <label className="inline-flex items-center gap-2 rounded-lg border border-border-subtle bg-surface px-3 py-2">
+            <input
+              type="checkbox"
+              checked={isSupplement}
+              onChange={(e) => setIsSupplement(e.target.checked)}
+              className="h-4 w-4 rounded border-border-subtle bg-card"
+            />
+            <span className="text-sm text-text-main">Mark as supplement (quick add in supplement log)</span>
+          </label>
         </div>
 
         {/* Serving Size Setup */}
