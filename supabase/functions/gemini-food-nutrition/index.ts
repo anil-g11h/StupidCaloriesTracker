@@ -225,13 +225,18 @@ function buildNutritionPrompt(input: { name: string; servingSize: number; servin
   const EXACT_MICROS_KEYS_TEXT = [
     'Histidine, Isoleucine, Leucine, Lysine, Methionine, Phenylalanine, Threonine, Tryptophan, Valine,',
     'Vitamin A, Vitamin C, Vitamin D, Vitamin E, Vitamin B12, Vitamin B6, Folate (B9),',
-    'Calcium, Magnesium, Potassium, Zinc, Iron, Sodium, Iodine.'
+    'Calcium, Magnesium, Potassium, Zinc, Iron, Sodium, Iodine,',
+    'Omega-3 (EPA+DHA), Ashwagandha Extract, Vitamin K2, Beta NMN, Creatine Monohydrate, Curcumin, CoQ10, Probiotic Blend, Electrolytes (Na+K+Mg), Vitamin D3.'
   ].join('\n');
 
   const MICROS_UNIT_CONTRACT_TEXT = [
     '- Amino acids: grams (g)',
     '- Vitamin A, Vitamin D, Vitamin B12, Folate (B9), Iodine: micrograms (mcg)',
-    '- Vitamin C, Vitamin E, Vitamin B6, Calcium, Magnesium, Potassium, Zinc, Iron, Sodium: milligrams (mg)'
+    '- Vitamin C, Vitamin E, Vitamin B6, Calcium, Magnesium, Potassium, Zinc, Iron, Sodium: milligrams (mg)',
+    '- Omega-3 (EPA+DHA), Ashwagandha Extract, Beta NMN, Curcumin, CoQ10, Electrolytes (Na+K+Mg): milligrams (mg)',
+    '- Vitamin K2, Vitamin D3: micrograms (mcg)',
+    '- Creatine Monohydrate: grams (g)',
+    '- Probiotic Blend: billion CFU (B CFU)'
   ].join('\n');
 
   const allowedDietTags = [

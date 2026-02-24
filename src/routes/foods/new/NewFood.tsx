@@ -28,6 +28,19 @@ const ESSENTIAL_MINERAL_KEYS = [
   'Iodine'
 ] as const;
 
+const SUPPLEMENT_COMPOUND_KEYS = [
+  'Omega-3 (EPA+DHA)',
+  'Ashwagandha Extract',
+  'Vitamin K2',
+  'Beta NMN',
+  'Creatine Monohydrate',
+  'Curcumin',
+  'CoQ10',
+  'Probiotic Blend',
+  'Electrolytes (Na+K+Mg)',
+  'Vitamin D3'
+] as const;
+
 const ESSENTIAL_VITAMIN_UNITS: Record<(typeof ESSENTIAL_VITAMIN_KEYS)[number], string> = {
   'Vitamin A': 'mcg',
   'Vitamin C': 'mg',
@@ -48,22 +61,41 @@ const ESSENTIAL_MINERAL_UNITS: Record<(typeof ESSENTIAL_MINERAL_KEYS)[number], s
   Iodine: 'mcg'
 };
 
+const SUPPLEMENT_COMPOUND_UNITS: Record<(typeof SUPPLEMENT_COMPOUND_KEYS)[number], string> = {
+  'Omega-3 (EPA+DHA)': 'mg',
+  'Ashwagandha Extract': 'mg',
+  'Vitamin K2': 'mcg',
+  'Beta NMN': 'mg',
+  'Creatine Monohydrate': 'g',
+  Curcumin: 'mg',
+  CoQ10: 'mg',
+  'Probiotic Blend': 'B CFU',
+  'Electrolytes (Na+K+Mg)': 'mg',
+  'Vitamin D3': 'mcg'
+};
+
 const REQUIRED_MICRO_KEYS = [
   ...ESSENTIAL_AMINO_ACIDS,
   ...ESSENTIAL_VITAMIN_KEYS,
-  ...ESSENTIAL_MINERAL_KEYS
+  ...ESSENTIAL_MINERAL_KEYS,
+  ...SUPPLEMENT_COMPOUND_KEYS
 ] as const;
 
 const EXACT_MICROS_KEYS_TEXT = [
   'Histidine, Isoleucine, Leucine, Lysine, Methionine, Phenylalanine, Threonine, Tryptophan, Valine,',
   'Vitamin A, Vitamin C, Vitamin D, Vitamin E, Vitamin B12, Vitamin B6, Folate (B9),',
-  'Calcium, Magnesium, Potassium, Zinc, Iron, Sodium, Iodine.'
+  'Calcium, Magnesium, Potassium, Zinc, Iron, Sodium, Iodine,',
+  'Omega-3 (EPA+DHA), Ashwagandha Extract, Vitamin K2, Beta NMN, Creatine Monohydrate, Curcumin, CoQ10, Probiotic Blend, Electrolytes (Na+K+Mg), Vitamin D3.'
 ].join('\n');
 
 const MICROS_UNIT_CONTRACT_TEXT = [
   '- Amino acids: grams (g)',
   '- Vitamin A, Vitamin D, Vitamin B12, Folate (B9), Iodine: micrograms (mcg)',
-  '- Vitamin C, Vitamin E, Vitamin B6, Calcium, Magnesium, Potassium, Zinc, Iron, Sodium: milligrams (mg)'
+  '- Vitamin C, Vitamin E, Vitamin B6, Calcium, Magnesium, Potassium, Zinc, Iron, Sodium: milligrams (mg)',
+  '- Omega-3 (EPA+DHA), Ashwagandha Extract, Beta NMN, Curcumin, CoQ10, Electrolytes (Na+K+Mg): milligrams (mg)',
+  '- Vitamin K2, Vitamin D3: micrograms (mcg)',
+  '- Creatine Monohydrate: grams (g)',
+  '- Probiotic Blend: billion CFU (B CFU)'
 ].join('\n');
 
 const FOOD_DIET_TAG_OPTIONS = [
@@ -104,7 +136,17 @@ const KEY_ALIASES: Record<string, string[]> = {
   Zinc: ['Zinc'],
   Iron: ['Iron'],
   Sodium: ['Sodium', 'Na'],
-  Iodine: ['Iodine']
+  Iodine: ['Iodine'],
+  'Omega-3 (EPA+DHA)': ['Omega-3 (EPA+DHA)', 'omega 3', 'omega3', 'epa', 'dha', 'epa dha', 'fish oil'],
+  'Ashwagandha Extract': ['Ashwagandha Extract', 'ashwagandha', 'withania somnifera'],
+  'Vitamin K2': ['Vitamin K2', 'vitamin_k2', 'k2', 'menaquinone', 'mk-7', 'mk7'],
+  'Beta NMN': ['Beta NMN', 'nmn', 'beta-nmn', 'nicotinamide mononucleotide'],
+  'Creatine Monohydrate': ['Creatine Monohydrate', 'creatine', 'creatine mono', 'micronized creatine'],
+  Curcumin: ['Curcumin', 'turmeric extract', 'curcuminoids'],
+  CoQ10: ['CoQ10', 'coq-10', 'ubiquinone', 'ubiquinol'],
+  'Probiotic Blend': ['Probiotic Blend', 'probiotic', 'lactobacillus', 'bifidobacterium', 'cfu'],
+  'Electrolytes (Na+K+Mg)': ['Electrolytes (Na+K+Mg)', 'electrolytes', 'electrolyte blend', 'sodium potassium magnesium'],
+  'Vitamin D3': ['Vitamin D3', 'd3', 'cholecalciferol']
 };
 
 const normalizeMicroKey = (value: string) =>
@@ -505,9 +547,10 @@ const CreateFood: React.FC = () => {
 
   const copyAIPrompt = () => {
     const foodTarget = name || "[INSERT FOOD NAME]";
+    const brandTarget = brand.trim() || '[INSERT BRAND NAME OR UNKNOWN]';
     const normalizedServingUnit = normalizeServingUnit(servingUnit);
     const copyLabel = SERVING_UNIT_OPTIONS.find((option) => option.value === normalizedServingUnit)?.copyLabel || normalizedServingUnit;
-    const prompt = `Act as a clinical nutrition database. Provide the full nutritional profile for "${foodTarget}" specifically for a serving size of ${servingSize}${normalizedServingUnit}.
+    const prompt = `Act as a clinical nutrition database. Provide the full nutritional profile for "${foodTarget}" from brand "${brandTarget}" specifically for a serving size of ${servingSize}${normalizedServingUnit}.
   Return data ONLY as raw JSON with keys: "protein", "fat", "carbs", "calories", "micros", "diet_tags", "allergen_tags", "ai_notes".
 
   EXACT_MICROS_KEYS:
@@ -983,6 +1026,30 @@ const CreateFood: React.FC = () => {
                       className="w-full p-2 pr-10 text-sm border border-border-subtle rounded-lg focus:ring-1 focus:ring-brand outline-none bg-card text-text-main" 
                     />
                     <span className="absolute right-2 top-2 text-[10px] text-text-muted">{ESSENTIAL_MINERAL_UNITS[mineral]}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </details>
+
+          <details className="group border border-border-subtle rounded-xl overflow-hidden shadow-sm">
+            <summary className="p-4 bg-card cursor-pointer hover:bg-surface flex items-center justify-between select-none">
+              <span className="font-bold text-sm text-text-main">Supplement Compounds</span>
+              <span className="text-text-muted group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3 bg-surface border-t border-border-subtle">
+              {SUPPLEMENT_COMPOUND_KEYS.map((compound) => (
+                <div key={compound} className="flex flex-col">
+                  <label className="text-[10px] font-bold text-text-muted uppercase mb-1">{compound}</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="any"
+                      value={micros[compound] ?? ''}
+                      onChange={(e) => setMicros(p => ({ ...p, [compound]: parseFloat(e.target.value) || 0 }))}
+                      className="w-full p-2 pr-10 text-sm border border-border-subtle rounded-lg focus:ring-1 focus:ring-brand outline-none bg-card text-text-main"
+                    />
+                    <span className="absolute right-2 top-2 text-[10px] text-text-muted">{SUPPLEMENT_COMPOUND_UNITS[compound]}</span>
                   </div>
                 </div>
               ))}

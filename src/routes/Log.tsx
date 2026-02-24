@@ -1454,38 +1454,40 @@ export default function DailyLogPage() {
                 <span className="text-sm text-text-muted font-medium">{mealCalories} kcal</span>
               </div>
 
-              <div className="mb-3 bg-surface rounded-xl p-2.5 border border-border-subtle">
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <p className="text-[11px] font-semibold text-text-main">Amino target</p>
-                  <span className="text-[11px] font-semibold text-brand">
-                    {aminoMode === 'hypertrophy' ? 'Hypertrophy' : 'WHO'}
-                  </span>
-                </div>
-
-                {mealAmino ? (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between gap-2 text-[11px]">
-                      <p className="text-text-muted">
-                        Leucine {Math.round(mealAmino.leucineIntake * 100) / 100}g / {Math.round(perMealLeucineTarget * 100) / 100}g
-                      </p>
-                      <span className={`font-semibold ${mealAmino.leucineHit ? 'text-brand' : 'text-text-muted'}`}>
-                        {perMealLeucineTarget > 0 ? (mealAmino.leucineHit ? 'Met' : 'Miss') : 'No target'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 text-[11px]">
-                      <p className="text-text-muted">
-                        EAA {Math.round(mealAmino.eaaIntake * 100) / 100}g / {Math.round(perMealEaaTarget * 100) / 100}g
-                      </p>
-                      <span className={`font-semibold ${mealAmino.eaaHit ? 'text-brand' : 'text-text-muted'}`}>
-                        {perMealEaaTarget > 0 ? (mealAmino.eaaHit ? 'Met' : 'Miss') : 'No target'}
-                      </span>
-                    </div>
+              {!isSupplementSection && (
+                <div className="mb-3 bg-surface rounded-xl p-2.5 border border-border-subtle">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <p className="text-[11px] font-semibold text-text-main">Amino target</p>
+                    <span className="text-[11px] font-semibold text-brand">
+                      {aminoMode === 'hypertrophy' ? 'Hypertrophy' : 'WHO'}
+                    </span>
                   </div>
-                ) : (
-                  <p className="text-[11px] text-text-muted">No food logged in this meal yet.</p>
-                )}
-              </div>
+
+                  {mealAmino ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                        <p className="text-text-muted">
+                          Leucine {Math.round(mealAmino.leucineIntake * 100) / 100}g / {Math.round(perMealLeucineTarget * 100) / 100}g
+                        </p>
+                        <span className={`font-semibold ${mealAmino.leucineHit ? 'text-brand' : 'text-text-muted'}`}>
+                          {perMealLeucineTarget > 0 ? (mealAmino.leucineHit ? 'Met' : 'Miss') : 'No target'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                        <p className="text-text-muted">
+                          EAA {Math.round(mealAmino.eaaIntake * 100) / 100}g / {Math.round(perMealEaaTarget * 100) / 100}g
+                        </p>
+                        <span className={`font-semibold ${mealAmino.eaaHit ? 'text-brand' : 'text-text-muted'}`}>
+                          {perMealEaaTarget > 0 ? (mealAmino.eaaHit ? 'Met' : 'Miss') : 'No target'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-text-muted">No food logged in this meal yet.</p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-3">
                 {usesSupplementChecklist && (
