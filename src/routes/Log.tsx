@@ -578,6 +578,21 @@ function circularMinuteDistance(a: number, b: number): number {
   return Math.min(diff, 1440 - diff);
 }
 
+function getLogMinutesForMealPlacement(log: Pick<DailyLog, 'meal_time' | 'created_at'>): number | null {
+  const mealMinutes = parseMealTimeToMinutes(normalizeClockTime(log.meal_time) || undefined);
+  if (mealMinutes !== null) return mealMinutes;
+
+  if (log.created_at) {
+    const createdAt = log.created_at instanceof Date ? log.created_at : new Date(log.created_at);
+    const timestamp = createdAt.getTime();
+    if (Number.isFinite(timestamp)) {
+      return createdAt.getHours() * 60 + createdAt.getMinutes();
+    }
+  }
+
+  return null;
+}
+
 export default function DailyLogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [settings, setSettings] = useState<TrackerSettings | null>(() => readSettingsFromLocalStorage());
@@ -981,14 +996,53 @@ export default function DailyLogPage() {
 
   const mealSections = useMemo<MealSection[]>(() => {
     const matchedLogIds = new Set<string>();
+    const timedMeals = mealDefinitions
+      .map((meal) => ({ meal, minutes: parseMealTimeToMinutes(meal.time) }))
+      .filter((item): item is { meal: MealDefinition; minutes: number } => item.minutes !== null);
+
+    const logsByMealId = new Map<string, ExtendedLog[]>();
+
+    if (timedMeals.length > 0) {
+      timedMeals.forEach(({ meal }) => {
+        logsByMealId.set(meal.id, []);
+      });
+
+      extendedLogs.forEach((log) => {
+        const logMinutes = getLogMinutesForMealPlacement(log);
+        if (logMinutes === null) return;
+
+        let closestMealId: string | null = null;
+        let closestDistance = Number.POSITIVE_INFINITY;
+
+        timedMeals.forEach(({ meal, minutes }) => {
+          const distance = circularMinuteDistance(logMinutes, minutes);
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestMealId = meal.id;
+          }
+        });
+
+        if (!closestMealId) return;
+
+        const bucket = logsByMealId.get(closestMealId) || [];
+        bucket.push(log);
+        logsByMealId.set(closestMealId, bucket);
+        matchedLogIds.add(log.id);
+      });
+    }
 
     const configuredSectionsWithOrder = mealDefinitions.map((meal, index) => {
-      const logs = extendedLogs.filter((log) => {
-        const logMeal = normalizeKey(log.meal_type || '');
-        const isMatch = meal.aliases.has(logMeal);
-        if (isMatch) matchedLogIds.add(log.id);
-        return isMatch;
-      });
+      const logs = (logsByMealId.get(meal.id) || []).slice();
+
+      if (timedMeals.length === 0) {
+        extendedLogs.forEach((log) => {
+          const logMeal = normalizeKey(log.meal_type || '');
+          const isMatch = meal.aliases.has(logMeal);
+          if (!isMatch) return;
+          logs.push(log);
+          matchedLogIds.add(log.id);
+        });
+      }
 
       return {
         order: index,
@@ -1215,7 +1269,6 @@ export default function DailyLogPage() {
     }
 
     await db.logs.update(log.id, {
-      meal_type: candidates[selectedIndex].id,
       meal_time: mealTimeById.get(normalizeKey(candidates[selectedIndex].id)),
       synced: 0
     });

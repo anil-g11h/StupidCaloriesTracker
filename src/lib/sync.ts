@@ -506,6 +506,7 @@ export class SyncManager {
 
     private async normalizeDailyLogMealType(rawMealType: unknown): Promise<string> {
         const value = String(rawMealType ?? '').trim().toLowerCase();
+        if (!value) return 'snack';
 
         const inferred = this.inferCanonicalMealType(value);
         if (inferred) return inferred;
@@ -520,14 +521,14 @@ export class SyncManager {
 
             if (!aliases.has(value)) continue;
 
-            const nameMatch = this.inferCanonicalMealType(name);
-            if (nameMatch) return nameMatch;
+            const normalizedId = id.trim().toLowerCase();
+            if (normalizedId) return normalizedId;
 
-            const idMatch = this.inferCanonicalMealType(id);
-            if (idMatch) return idMatch;
+            const normalizedName = name.trim().toLowerCase();
+            if (normalizedName) return normalizedName;
         }
 
-        return 'snack';
+        return value;
     }
 
     private getMissingColumnFromError(error: any): string | null {
