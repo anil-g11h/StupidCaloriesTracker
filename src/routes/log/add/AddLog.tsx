@@ -645,10 +645,11 @@ export default function AddLogEntry() {
 
     try {
       const now = new Date();
+      const resolvedUserId = currentUserId || 'local-user';
       const resolvedMealTime = extractMealTimeFromSettings(settingsRow, mealType) || formatTimeHHmm(now);
       const entry = {
         id: logId || generateId(), // If logId exists, we update, else create
-        user_id: 'local-user',
+        user_id: resolvedUserId,
         date,
         meal_type: mealType,
         meal_time: resolvedMealTime,
@@ -662,8 +663,9 @@ export default function AddLogEntry() {
         const existingLog = await db.logs.get(logId);
         await db.logs.put({
           ...entry,
+          user_id: existingLog?.user_id || resolvedUserId,
           created_at: existingLog?.created_at || now,
-          meal_time: existingLog?.meal_time || resolvedMealTime
+          meal_time: resolvedMealTime
         });
         pop();
         return;
@@ -700,11 +702,12 @@ export default function AddLogEntry() {
       }
 
       const now = new Date();
+      const resolvedUserId = currentUserId || 'local-user';
       const resolvedMealTime = extractMealTimeFromSettings(settingsRow, mealType) || formatTimeHHmm(now);
 
       await db.logs.add({
         id: generateId(),
-        user_id: 'local-user',
+        user_id: resolvedUserId,
         date,
         meal_type: mealType,
         meal_time: resolvedMealTime,

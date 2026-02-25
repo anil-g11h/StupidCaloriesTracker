@@ -727,12 +727,15 @@ export default function DailyLogPage() {
       const list = await db.metrics
         .where('type')
         .equals('weight')
-        .and((metric) => metric.user_id === currentUserId && metric.date <= date)
+        .and((metric) => metric.date <= date)
         .toArray();
 
       if (!list.length) return null;
 
-      return list.sort((a, b) => {
+      const currentUserList = list.filter((metric) => metric.user_id === currentUserId);
+      const source = currentUserList.length ? currentUserList : list;
+
+      return source.sort((a, b) => {
         if (a.date !== b.date) return a.date > b.date ? -1 : 1;
         return getMetricCreatedAtTime(b.created_at) - getMetricCreatedAtTime(a.created_at);
       })[0];
@@ -996,6 +999,7 @@ export default function DailyLogPage() {
 
   const mealSections = useMemo<MealSection[]>(() => {
     const matchedLogIds = new Set<string>();
+    const supplementMeal = mealDefinitions.find((meal) => normalizeKey(meal.id) === 'supplement');
     const timedMeals = mealDefinitions
       .map((meal) => ({ meal, minutes: parseMealTimeToMinutes(meal.time) }))
       .filter((item): item is { meal: MealDefinition; minutes: number } => item.minutes !== null);
@@ -1008,6 +1012,15 @@ export default function DailyLogPage() {
       });
 
       extendedLogs.forEach((log) => {
+        const isSupplementLog = normalizeKey(log.meal_type || '') === 'supplement';
+        if (isSupplementLog && supplementMeal) {
+          const supplementBucket = logsByMealId.get(supplementMeal.id) || [];
+          supplementBucket.push(log);
+          logsByMealId.set(supplementMeal.id, supplementBucket);
+          matchedLogIds.add(log.id);
+          return;
+        }
+
         const logMinutes = getLogMinutesForMealPlacement(log);
         if (logMinutes === null) return;
 
@@ -1203,24 +1216,17 @@ export default function DailyLogPage() {
   }, [isToday, mealSections, timeTick]);
 
   const moveMealOptions = useMemo<MoveMealOption[]>(() => {
-    const options: MoveMealOption[] = [];
-    const seen = new Set<string>();
+    if (mealSections.length > 0) {
+      return mealSections.map((meal) => ({
+        id: meal.id,
+        label: meal.time ? `${meal.label} (${meal.time})` : meal.label
+      }));
+    }
 
-    mealDefinitions.forEach((meal) => {
-      const key = normalizeKey(meal.id);
-      if (seen.has(key)) return;
-      seen.add(key);
-      options.push({ id: meal.id, label: meal.name });
-    });
-
-    mealSections.forEach((meal) => {
-      const key = normalizeKey(meal.id);
-      if (seen.has(key)) return;
-      seen.add(key);
-      options.push({ id: meal.id, label: meal.label });
-    });
-
-    return options;
+    return mealDefinitions.map((meal) => ({
+      id: meal.id,
+      label: meal.time ? `${meal.name} (${meal.time})` : meal.name
+    }));
   }, [mealDefinitions, mealSections]);
 
   const mealTimeById = useMemo(() => {
@@ -1248,8 +1254,8 @@ export default function DailyLogPage() {
     }
   };
 
-  const moveLogToMeal = async (log: ExtendedLog) => {
-    const currentMeal = normalizeKey(log.meal_type || '');
+  const moveLogToMeal = async (log: ExtendedLog, currentMealId: string) => {
+    const currentMeal = normalizeKey(currentMealId || log.meal_type || '');
     const candidates = moveMealOptions.filter((option) => normalizeKey(option.id) !== currentMeal);
 
     if (!candidates.length) {
@@ -1676,7 +1682,7 @@ export default function DailyLogPage() {
                   const proteinPct = (proteinKcal / macroKcalTotal) * 100;
                   const carbsPct = (carbsKcal / macroKcalTotal) * 100;
                   const fatPct = (fatKcal / macroKcalTotal) * 100;
-                  const addedTime = normalizeClockTime(log.meal_time) || normalizeClockTime(meal.time) || formatLogCreatedAtTime(log.created_at);
+                  const addedTime = normalizeClockTime(log.meal_time) || formatLogCreatedAtTime(log.created_at);
 
                   return (
                     <div
@@ -1723,7 +1729,7 @@ export default function DailyLogPage() {
                             </Link>
                             <button
                               type="button"
-                              onClick={() => moveLogToMeal(log)}
+                              onClick={() => moveLogToMeal(log, meal.id)}
                               className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-text-main hover:bg-surface"
                             >
                               Move

@@ -51,7 +51,8 @@ create table if not exists public.daily_logs (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users(id) not null,
   date date not null default current_date,
-  meal_type text check (meal_type in ('breakfast', 'lunch', 'dinner', 'snack', 'supplement')),
+  meal_type text check (length(trim(coalesce(meal_type, ''))) > 0),
+  meal_time text check (meal_time is null or meal_time ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'),
   food_id uuid references public.foods(id),
   amount_consumed numeric not null default 1, -- Multiplier of serving size
   created_at timestamp with time zone default timezone('utc'::text, now()) not null

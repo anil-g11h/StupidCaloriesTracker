@@ -504,31 +504,129 @@ export class SyncManager {
         return [...new Set([normalized, slug, underscore, dashed].filter(Boolean))];
     }
 
-    private async normalizeDailyLogMealType(rawMealType: unknown): Promise<string> {
-        const value = String(rawMealType ?? '').trim().toLowerCase();
-        if (!value) return 'snack';
+    private parseClockToMinutes(value: unknown): number | null {
+        if (typeof value !== 'string') return null;
+        const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+        if (!match) return null;
 
-        const inferred = this.inferCanonicalMealType(value);
-        if (inferred) return inferred;
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+        return hours * 60 + minutes;
+    }
+
+    private circularMinuteDistance(a: number, b: number): number {
+        const diff = Math.abs(a - b);
+        return Math.min(diff, 1440 - diff);
+    }
+
+    private inferCanonicalMealTypeFromTime(minutes: number, meals?: any[]): string {
+        const defaults: Array<{ type: string; minutes: number }> = [
+            { type: 'breakfast', minutes: 8 * 60 },
+            { type: 'lunch', minutes: 13 * 60 },
+            { type: 'snack', minutes: 16 * 60 },
+            { type: 'dinner', minutes: 20 * 60 }
+        ];
+
+        const anchors = new Map<string, number>(defaults.map((item) => [item.type, item.minutes]));
+
+        if (Array.isArray(meals)) {
+            for (const meal of meals) {
+                const mealMinutes = this.parseClockToMinutes(meal?.time);
+                if (mealMinutes === null) continue;
+
+                const canonical =
+                    this.inferCanonicalMealType(String(meal?.id ?? '')) ||
+                    this.inferCanonicalMealType(String(meal?.name ?? ''));
+
+                if (canonical) {
+                    anchors.set(canonical, mealMinutes);
+                }
+            }
+        }
+
+        const candidates = [...anchors.entries()].map(([type, minutes]) => ({ type, minutes }));
+
+        let best = candidates[0] || defaults[0];
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        for (const candidate of candidates) {
+            const distance = this.circularMinuteDistance(minutes, candidate.minutes);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+
+        return best.type;
+    }
+
+    private inferConfiguredMealTypeFromTime(minutes: number, meals: any[]): string | null {
+        const timedMeals = meals
+            .map((meal) => {
+                const mealMinutes = this.parseClockToMinutes(meal?.time);
+                if (mealMinutes === null) return null;
+
+                const id = String(meal?.id ?? '').trim().toLowerCase();
+                const name = String(meal?.name ?? '').trim().toLowerCase();
+                const resolved = id || name;
+                if (!resolved) return null;
+
+                return { value: resolved, minutes: mealMinutes };
+            })
+            .filter((item): item is { value: string; minutes: number } => Boolean(item));
+
+        if (!timedMeals.length) return null;
+
+        let best = timedMeals[0];
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        for (const candidate of timedMeals) {
+            const distance = this.circularMinuteDistance(minutes, candidate.minutes);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+
+        return best.value;
+    }
+
+    private async normalizeDailyLogMealType(rawMealType: unknown, rawMealTime?: unknown): Promise<string> {
+        const value = String(rawMealType ?? '').trim().toLowerCase();
+        const mealTimeMinutes = this.parseClockToMinutes(rawMealTime);
 
         const settings = await db.settings.get('local-settings');
         const meals = Array.isArray((settings as any)?.meals) ? (settings as any).meals : [];
 
-        for (const meal of meals) {
-            const id = String(meal?.id ?? '');
-            const name = String(meal?.name ?? '');
-            const aliases = new Set([...this.buildMealAliases(id), ...this.buildMealAliases(name)]);
+        if (value) {
+            for (const meal of meals) {
+                const id = String(meal?.id ?? '');
+                const name = String(meal?.name ?? '');
+                const aliases = new Set([...this.buildMealAliases(id), ...this.buildMealAliases(name)]);
 
-            if (!aliases.has(value)) continue;
+                if (!aliases.has(value)) continue;
 
-            const normalizedId = id.trim().toLowerCase();
-            if (normalizedId) return normalizedId;
+                const normalizedId = id.trim().toLowerCase();
+                if (normalizedId) return normalizedId;
 
-            const normalizedName = name.trim().toLowerCase();
-            if (normalizedName) return normalizedName;
+                const normalizedName = name.trim().toLowerCase();
+                if (normalizedName) return normalizedName;
+            }
+
+            return value;
         }
 
-        return value;
+        if (mealTimeMinutes !== null) {
+            const configuredMatch = this.inferConfiguredMealTypeFromTime(mealTimeMinutes, meals);
+            if (configuredMatch) return configuredMatch;
+
+            return this.inferCanonicalMealTypeFromTime(mealTimeMinutes, meals);
+        }
+
+        return 'snack';
     }
 
     private getMissingColumnFromError(error: any): string | null {
@@ -813,7 +911,7 @@ export class SyncManager {
     }
 
         if (supabaseTable === 'daily_logs') {
-            payload.meal_type = await this.normalizeDailyLogMealType(payload.meal_type);
+            payload.meal_type = await this.normalizeDailyLogMealType(payload.meal_type, payload.meal_time);
         }
     
     const actorLabel = supportsUserId
