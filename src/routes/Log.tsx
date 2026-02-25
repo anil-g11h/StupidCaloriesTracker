@@ -353,6 +353,31 @@ function getMetricCreatedAtTime(value: BodyMetric['created_at']): number {
   return 0;
 }
 
+function formatLogCreatedAtTime(value: DailyLog['created_at']): string | null {
+  if (!value) return null;
+
+  const date = value instanceof Date ? value : new Date(value);
+  const timestamp = date.getTime();
+  if (!Number.isFinite(timestamp)) return null;
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function normalizeClockTime(value?: string): string | null {
+  if (!value) return null;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
 function toKg(value: number, unit: string): number {
   if (!Number.isFinite(value)) return 0;
   const normalizedUnit = normalizeKey(unit || '');
@@ -1144,6 +1169,24 @@ export default function DailyLogPage() {
     return options;
   }, [mealDefinitions, mealSections]);
 
+  const mealTimeById = useMemo(() => {
+    const map = new Map<string, string>();
+
+    mealDefinitions.forEach((meal) => {
+      const normalizedTime = normalizeClockTime(meal.time);
+      if (normalizedTime) map.set(normalizeKey(meal.id), normalizedTime);
+    });
+
+    mealSections.forEach((meal) => {
+      const key = normalizeKey(meal.id);
+      if (map.has(key)) return;
+      const normalizedTime = normalizeClockTime(meal.time);
+      if (normalizedTime) map.set(key, normalizedTime);
+    });
+
+    return map;
+  }, [mealDefinitions, mealSections]);
+
   const deleteLog = async (id: string) => {
     if (window.confirm('Delete this entry?')) {
       setOpenActionsLogId(null);
@@ -1173,6 +1216,7 @@ export default function DailyLogPage() {
 
     await db.logs.update(log.id, {
       meal_type: candidates[selectedIndex].id,
+      meal_time: mealTimeById.get(normalizeKey(candidates[selectedIndex].id)),
       synced: 0
     });
 
@@ -1197,6 +1241,7 @@ export default function DailyLogPage() {
         user_id: currentUserId || 'local-user',
         date,
         meal_type: 'supplement',
+        meal_time: mealTimeById.get('supplement'),
         food_id: food.id,
         amount_consumed: 1,
         synced: 0,
@@ -1578,6 +1623,7 @@ export default function DailyLogPage() {
                   const proteinPct = (proteinKcal / macroKcalTotal) * 100;
                   const carbsPct = (carbsKcal / macroKcalTotal) * 100;
                   const fatPct = (fatKcal / macroKcalTotal) * 100;
+                  const addedTime = normalizeClockTime(log.meal_time) || normalizeClockTime(meal.time) || formatLogCreatedAtTime(log.created_at);
 
                   return (
                     <div
@@ -1600,6 +1646,7 @@ export default function DailyLogPage() {
                             <div className="bg-macro-carbs" style={{ width: `${carbsPct}%` }} title={`${log.carbs}c`} />
                             <div className="bg-macro-fat" style={{ width: `${fatPct}%` }} title={`${log.fat}f`} />
                           </div>
+                          {addedTime && <span className="ml-auto text-[10px] text-text-muted/80">{addedTime}</span>}
                         </div>
                       </div>
                       <div className="shrink-0 relative">

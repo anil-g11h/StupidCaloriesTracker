@@ -69,6 +69,7 @@ export interface DailyLog {
   user_id: string;
   date: string; // YYYY-MM-DD
   meal_type: string; // 'breakfast', 'lunch', 'dinner', 'snack'
+  meal_time?: string; // HH:mm meal slot time (scheduled)
   food_id: string;
   amount_consumed: number; // Multiplier of serving size
   created_at?: Date;

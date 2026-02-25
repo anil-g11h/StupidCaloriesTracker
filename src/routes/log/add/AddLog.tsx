@@ -81,6 +81,35 @@ function formatServingLabel(food: Food): string {
   return '1 serving';
 }
 
+function formatTimeHHmm(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function extractMealTimeFromSettings(settingsRow: unknown, mealType: string): string | undefined {
+  const normalizedMealType = mealType.trim().toLowerCase();
+  const meals = (settingsRow as { meals?: unknown })?.meals;
+  if (!Array.isArray(meals)) return undefined;
+
+  const matchedMeal = meals.find((meal) => {
+    const id = String((meal as { id?: unknown })?.id ?? '').trim().toLowerCase();
+    const name = String((meal as { name?: unknown })?.name ?? '').trim().toLowerCase();
+    return id === normalizedMealType || name === normalizedMealType;
+  }) as { time?: unknown } | undefined;
+
+  const time = typeof matchedMeal?.time === 'string' ? matchedMeal.time.trim() : '';
+  if (!/^\d{1,2}:\d{2}$/.test(time)) return undefined;
+
+  const [hoursText, minutesText] = time.split(':');
+  const hours = Number(hoursText);
+  const minutes = Number(minutesText);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return undefined;
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
 export default function AddLogEntry() {
   const [searchParams] = useSearchParams();
   const { pop } = useStackNavigation();
@@ -615,19 +644,27 @@ export default function AddLogEntry() {
     setServingConfigMessage('');
 
     try {
+      const now = new Date();
+      const resolvedMealTime = extractMealTimeFromSettings(settingsRow, mealType) || formatTimeHHmm(now);
       const entry = {
         id: logId || generateId(), // If logId exists, we update, else create
         user_id: 'local-user',
         date,
         meal_type: mealType,
+        meal_time: resolvedMealTime,
         food_id: selectedFood.id,
         amount_consumed: quantity,
         synced: 0,
-        created_at: new Date()
+        created_at: now
       };
       
       if (logId) {
-        await db.logs.put(entry);
+        const existingLog = await db.logs.get(logId);
+        await db.logs.put({
+          ...entry,
+          created_at: existingLog?.created_at || now,
+          meal_time: existingLog?.meal_time || resolvedMealTime
+        });
         pop();
         return;
       }
@@ -662,15 +699,19 @@ export default function AddLogEntry() {
         return;
       }
 
+      const now = new Date();
+      const resolvedMealTime = extractMealTimeFromSettings(settingsRow, mealType) || formatTimeHHmm(now);
+
       await db.logs.add({
         id: generateId(),
         user_id: 'local-user',
         date,
         meal_type: mealType,
+        meal_time: resolvedMealTime,
         food_id: food.id,
         amount_consumed: 1,
         synced: 0,
-        created_at: new Date()
+        created_at: now
       });
 
       setAddedCount((count) => count + 1);
