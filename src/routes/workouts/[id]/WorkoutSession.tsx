@@ -228,14 +228,14 @@ const SetRow = ({ set, onToggle }: { set: WorkoutSet; onToggle: () => void }) =>
         defaultValue={getEditableNumericInputValue(set.weight)}
         className="bg-surface p-2 rounded text-center font-bold outline-none focus:ring-1 focus:ring-brand"
         onFocus={handleWorkoutNumericInputFocus}
-        onChange={(e) => updateWorkoutSetNumberField(set.id, 'weight', e.target.value)}
+        onBlur={(e) => updateWorkoutSetNumberField(set.id, 'weight', e.target.value)}
       />
       <input
         type="number"
         defaultValue={getEditableNumericInputValue(set.reps)}
         className="bg-surface p-2 rounded text-center font-bold outline-none focus:ring-1 focus:ring-brand"
         onFocus={handleWorkoutNumericInputFocus}
-        onChange={(e) => updateWorkoutSetNumberField(set.id, 'reps', e.target.value)}
+        onBlur={(e) => updateWorkoutSetNumberField(set.id, 'reps', e.target.value)}
       />
     </div>
     <button
